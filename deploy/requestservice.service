@@ -16,7 +16,7 @@ Environment=ASPNETCORE_URLS=http://127.0.0.1:5006
 # --- Optional overrides. In Development these all come from appsettings.Development.json ---
 # Remote MSSQL connection string (server IP:port) - maps to ConnectionStrings:Requests
 # NOTE: value contains spaces/;/# so it MUST be double-quoted for systemd to parse it correctly.
-#Environment=ConnectionStrings__Requests="Server=185.255.91.242,2019;Database=apiweb-137service;User Id=apiweb137serviceuser;Password=REPLACE_ME;Encrypt=True;TrustServerCertificate=True;Connection Timeout=15;Connect Retry Count=3;Pooling=true;Max Pool Size=200;MultipleActiveResultSets=true"
+#Environment=ConnectionStrings__Requests="Server=185.255.91.242,2019;Database=apiweb-137request;User Id=apiweb137requestuser;Password=REPLACE_ME;Encrypt=True;TrustServerCertificate=True;Connection Timeout=15;Connect Retry Count=3;Pooling=true;Max Pool Size=200;MultipleActiveResultSets=true"
 # sso-login-service
 #Environment=Sso__BaseUrl=http://127.0.0.1:5001
 # files service

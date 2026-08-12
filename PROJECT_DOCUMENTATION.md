@@ -43,7 +43,7 @@ graph LR
     API["Request Service<br/>(Ø§ÛŒÙ† Ù¾Ø±ÙˆÚ˜Ù‡) port 5006"]
     API -->|GET /api/auth/me (Ø§Ø¹ØªØ¨Ø§Ø±Ø³Ù†Ø¬ÛŒ ØªÙˆÚ©Ù†)| SSO["sso-login-service<br/>port 5001"]
     API -->|GET /api/files/{id} (ØªØ£ÛŒÛŒØ¯ ÙØ§ÛŒÙ„)| Files["files service<br/>port 6000"]
-    API -->|EF Core| DB[("SQL Server 2019<br/>apiweb-137service")]
+    API -->|EF Core| DB[("SQL Server 2019<br/>apiweb-137request")]
 
     Nginx["Nginx / HTTPS"] --> API
 ```
@@ -466,7 +466,7 @@ dotnet build RequestService.sln -c Release         # Ø³Ø§Ø®Øª Ø®Ø±Ù
 
 | Ú©Ù„ÛŒØ¯ | ØªÙˆØ¶ÛŒØ­ | Ù…Ù‚Ø¯Ø§Ø± Ø­Ø³Ø§Ø³ØŸ |
 |---|---|---|
-| `ConnectionStrings:Requests` | Ø±Ø´ØªÙ‡ Ø§ØªØµØ§Ù„ SQL Server (Ø¯ÛŒØªØ§Ø¨ÛŒØ³ `apiweb-137service`) | Ø¨Ù„Ù‡ (ÙÙ‚Ø· Ø¯Ø± ØªÙ†Ø¸ÛŒÙ…Ø§Øª Development Ø¢Ù…Ø¯Ù‡ Ø§Ø³Øª) |
+| `ConnectionStrings:Requests` | Ø±Ø´ØªÙ‡ Ø§ØªØµØ§Ù„ SQL Server (Ø¯ÛŒØªØ§Ø¨ÛŒØ³ `apiweb-137request`) | Ø¨Ù„Ù‡ (ÙÙ‚Ø· Ø¯Ø± ØªÙ†Ø¸ÛŒÙ…Ø§Øª Development Ø¢Ù…Ø¯Ù‡ Ø§Ø³Øª) |
 | `Sso:BaseUrl` | Ø¢Ø¯Ø±Ø³ Ø³Ø±ÙˆÛŒØ³ SSO (Ø¯Ø± ØªÙˆØ³Ø¹Ù‡ `http://127.0.0.1:5001`) | Ø®ÛŒØ± |
 | `Sso:TimeoutSeconds` / `RetryCount` / `CircuitBreaker*` | Ù…Ù‚Ø§ÙˆÙ…â€ŒØ³Ø§Ø²ÛŒ ÙØ±Ø§Ø®ÙˆØ§Ù†ÛŒ SSO | Ø®ÛŒØ± |
 | `Files:BaseUrl` | Ø¢Ø¯Ø±Ø³ Ø³Ø±ÙˆÛŒØ³ ÙØ§ÛŒÙ„ (Ø¯Ø± ØªÙˆØ³Ø¹Ù‡ `http://127.0.0.1:6000`) | Ø®ÛŒØ± |
@@ -498,7 +498,7 @@ dotnet build RequestService.sln -c Release         # Ø³Ø§Ø®Øª Ø®Ø±Ù
 |---|---|---|---|
 | **sso-login-service** | `http://127.0.0.1:5001` | Ø§Ø¹ØªØ¨Ø§Ø±Ø³Ù†Ø¬ÛŒ ØªÙˆÚ©Ù† Ùˆ Ú¯Ø±ÙØªÙ† Ú©Ø¯ Ù…Ù„ÛŒ/ØªÙ„ÙÙ† (`GET /api/auth/me`) | Ø®Ø·Ø§ÛŒ ÛµÛ°Û³ `DEPENDENCY_UNAVAILABLE` (Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø´Ù‡Ø±ÙˆÙ†Ø¯ÛŒ Ø±Ø¯ Ù…ÛŒâ€ŒØ´ÙˆØ¯) |
 | **files service** | `http://127.0.0.1:6000` | ØªØ£ÛŒÛŒØ¯ ÙˆØ¬ÙˆØ¯ ÙØ§ÛŒÙ„ Ùˆ ØªØ´Ø®ÛŒØµ Ù†ÙˆØ¹ (`GET /api/files/{id}`) â€” ÙÙ‚Ø· Ù…ØªØ§Ø¯ÛŒØªØ§ | Ø®Ø·Ø§ÛŒ ÛµÛ°Û³ (Ø§Ú¯Ø± `ValidationEnabled=true`)Ø› Ø¯Ø± ØªÙˆØ³Ø¹Ù‡ Ø®Ø§Ù…ÙˆØ´ Ø§Ø³Øª |
-| **SQL Server 2019** | `185.255.91.242,2019` | Ù†Ú¯Ù‡Ø¯Ø§Ø±ÛŒ Ù‡Ù…Ù‡â€ŒÛŒ Ø¯Ø§Ø¯Ù‡ (`apiweb-137service`) | Health Ú†Ú© Ø®Ø±Ø§Ø¨ Ùˆ Ø¯Ø±Ø¬â€ŒÙ‡Ø§ Ø´Ú©Ø³Øª Ù…ÛŒâ€ŒØ®ÙˆØ±Ù†Ø¯ |
+| **SQL Server 2019** | `185.255.91.242,2019` | Ù†Ú¯Ù‡Ø¯Ø§Ø±ÛŒ Ù‡Ù…Ù‡â€ŒÛŒ Ø¯Ø§Ø¯Ù‡ (`apiweb-137request`) | Health Ú†Ú© Ø®Ø±Ø§Ø¨ Ùˆ Ø¯Ø±Ø¬â€ŒÙ‡Ø§ Ø´Ú©Ø³Øª Ù…ÛŒâ€ŒØ®ÙˆØ±Ù†Ø¯ |
 
 > Ø¯Ø± ÙØ§Ø² Û± Ù‡ÛŒÚ† Ø³Ø±ÙˆÛŒØ³ Ø¯ÛŒÚ¯Ø±ÛŒ (Ù¾ÛŒØ§Ù…Ú©ØŒ Ù†Ù‚Ø´Ù‡ØŒ Ù¾Ø±Ø¯Ø§Ø®Øª Ùˆ ...) ÙØ±Ø§Ø®ÙˆØ§Ù†ÛŒ Ù†Ù…ÛŒâ€ŒØ´ÙˆØ¯.
 

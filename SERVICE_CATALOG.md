@@ -16,7 +16,7 @@ Identity is resolved via the sibling `sso-login-service`; attachments are refere
 
 | Key | Purpose | Dev (appsettings.Development.json) |
 |---|---|---|
-| `ConnectionStrings:Requests` | SQL Server (shared engine `185.255.91.242,2019`) | `Database=apiweb-137service;User Id=apiweb137serviceuser;...` |
+| `ConnectionStrings:Requests` | SQL Server (shared engine `185.255.91.242,2019`) | `Database=apiweb-137request;User Id=apiweb137requestuser;...` |
 | `Sso:BaseUrl` | sso-login-service base URL | `http://127.0.0.1:5001` |
 | `Sso:UserInfoPath` | user-info endpoint | `/api/auth/me` |
 | `Files:BaseUrl` | files service base URL | `http://127.0.0.1:6000` |
@@ -101,7 +101,7 @@ All errors, including model-binding failures, return `{ "code": "...", "message"
 
 ## 6. Data model
 
-Tables (all in `apiweb-137service`, enums stored as strings, GUID PKs). Migrations: `20260812061144_InitialCreate`.
+Tables (all in `apiweb-137request`, enums stored as strings, GUID PKs). Migrations: `20260812061144_InitialCreate`.
 
 **`Requests`** â€” current snapshot only (no redundant PII; only NationalCode).
 
@@ -155,7 +155,7 @@ by EF not ordering separately-added children before the parent insert â€” f
 |---|---|---|
 | `sso-login-service` | `GET /api/auth/me` (Bearer) | 401 invalid token; 503 unreachable |
 | `files` service | `GET /api/files/{id}` (needs `Files:ServiceToken`) | 400 unknown fileId; 503 unreachable |
-| SQL Server `185.255.91.242,2019` (`apiweb-137service`) | EF Core | health check `database` reports Down |
+| SQL Server `185.255.91.242,2019` (`apiweb-137request`) | EF Core | health check `database` reports Down |
 
 ## 9. Open Items (blockers / to confirm)
 
@@ -169,7 +169,7 @@ by EF not ordering separately-added children before the parent insert â€” f
 3. **Files `ServiceToken`:** the files service authenticates service-to-service callers via a JWT
    (`Files:ServiceToken`, see files `Jwt` issuer `storage.sabzevar.ir`). The token must be issued and supplied;
    until then real fileId validation cannot run (`ValidationEnabled=false` in dev).
-4. **DB confirmed:** engine SQL Server 2019 at `185.255.91.242,2019`; DB `apiweb-137service` (user is db_owner).
+4. **DB confirmed:** engine SQL Server 2019 at `185.255.91.242,2019`; DB `apiweb-137request` (user is db_owner).
 5. **CORS origins:** final web-app origins must be confirmed and set in `Cors:AllowedOrigins` for prod.
 6. **Domain + nginx:** target domain `apiweb-137request.sabzevar.ir`, port 5006 â€” nginx/systemd/Docker configs are
    included in the repo (see `deploy/`, `Dockerfile`, `docker-compose.yml`) but the server-side install is not done.
