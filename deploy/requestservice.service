@@ -1,0 +1,44 @@
+[Unit]
+Description=Request Service (ASP.NET Core) - apiweb-137request.sabzevar.ir
+Documentation=https://apiweb-137request.sabzevar.ir
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/requestservice
+# Development so Swagger UI is served (uses appsettings.Development.json,
+# which already contains the dev DB connection string and the dev API key).
+Environment=ASPNETCORE_ENVIRONMENT=Development
+# Service listens on port 5050 (behind nginx)
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5050
+
+# --- Optional overrides. In Development these all come from appsettings.Development.json ---
+# Remote MSSQL connection string (server IP:port) - maps to ConnectionStrings:Requests
+# NOTE: value contains spaces/;/# so it MUST be double-quoted for systemd to parse it correctly.
+#Environment=ConnectionStrings__Requests="Server=185.255.91.242,2019;Database=apiweb-137service;User Id=apiweb137serviceuser;Password=REPLACE_ME;Encrypt=True;TrustServerCertificate=True;Connection Timeout=15;Connect Retry Count=3;Pooling=true;Max Pool Size=200;MultipleActiveResultSets=true"
+# sso-login-service
+#Environment=Sso__BaseUrl=http://127.0.0.1:5001
+# files service
+#Environment=Files__BaseUrl=http://127.0.0.1:6000
+#Environment=Files__ValidationEnabled=false
+# Internal API keys for telephony/IVR and internal-service channels
+#Environment=InternalAuth__ApiKeys__0__Key=REPLACE_ME
+#Environment=InternalAuth__ApiKeys__0__Name=Telephony
+
+ExecStart=/usr/bin/dotnet /opt/requestservice/RequestService.Api.dll
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+# Security hardening
+User=requestservice
+Group=requestservice
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/requestservice
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# Development environment.
+#   - App container only (no Redis — the request-service is stateless).
+#   - MSSQL is NOT containerized: it lives on the separate Windows server.
+#     Connection string comes from appsettings.Development.json (copied into the image),
+#     so it is NOT overridden here.
+#
+# Usage:
+#   docker compose up --build
+#   Swagger: http://localhost:5050/swagger
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: requestservice-app
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5050
+      # sso-login-service and files service as reachable from the Docker host.
+      # (appsettings.Development.json points at 127.0.0.1, which inside a container
+      #  is the container itself, so we override with host.docker.internal.)
+      Sso__BaseUrl: "http://host.docker.internal:5001"
+      Files__BaseUrl: "http://host.docker.internal:6000"
+    ports:
+      - "5050:5050"

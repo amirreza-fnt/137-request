@@ -1,0 +1,16 @@
+# Build output
+**/bin/
+**/obj/
+*.user
+
+# Runtime artifacts
+*.log
+test-api-*.log
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Temp request bodies (local curl tests)
+*.json.local
