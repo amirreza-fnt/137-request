@@ -10,8 +10,8 @@ WorkingDirectory=/opt/requestservice
 # Development so Swagger UI is served (uses appsettings.Development.json,
 # which already contains the dev DB connection string and the dev API key).
 Environment=ASPNETCORE_ENVIRONMENT=Development
-# Service listens on port 5050 (behind nginx)
-Environment=ASPNETCORE_URLS=http://127.0.0.1:5050
+# Service listens on port 5006 (behind nginx)
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5006
 
 # --- Optional overrides. In Development these all come from appsettings.Development.json ---
 # Remote MSSQL connection string (server IP:port) - maps to ConnectionStrings:Requests

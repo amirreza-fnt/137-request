@@ -21,7 +21,7 @@ COPY --from=build /out .
 
 # Development so Swagger UI is served out of the box (uses appsettings.Development.json).
 ENV ASPNETCORE_ENVIRONMENT=Development
-ENV ASPNETCORE_URLS=http://+:5050
-EXPOSE 5050
+ENV ASPNETCORE_URLS=http://+:5006
+EXPOSE 5006
 
 ENTRYPOINT ["dotnet", "RequestService.Api.dll"]

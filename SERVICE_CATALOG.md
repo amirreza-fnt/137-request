@@ -1,13 +1,13 @@
-# SERVICE_CATALOG.md — Request Service (ثبت درخواست سامانه ۱۳۷)
+﻿# SERVICE_CATALOG.md â€” Request Service (Ø«Ø¨Øª Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø³Ø§Ù…Ø§Ù†Ù‡ Û±Û³Û·)
 
-**Version:** Phase 1 (initial: create request) · **Stack:** ASP.NET Core 8 / EF Core 8 / SQL Server 2019
-**Solution:** `RequestService.sln` · **Root:** `src/` (Api · Application · Domain · Infrastructure — Clean Architecture, mirrors `files` service)
+**Version:** Phase 1 (initial: create request) Â· **Stack:** ASP.NET Core 8 / EF Core 8 / SQL Server 2019
+**Solution:** `RequestService.sln` Â· **Root:** `src/` (Api Â· Application Â· Domain Â· Infrastructure â€” Clean Architecture, mirrors `files` service)
 
 ---
 
 ## 1. Purpose
 
-Registers citizen requests (ثبت درخواست) for the 137 municipality system (Sabzevar). It is the entry point for the
+Registers citizen requests (Ø«Ø¨Øª Ø¯Ø±Ø®ÙˆØ§Ø³Øª) for the 137 municipality system (Sabzevar). It is the entry point for the
 **citizen apps**, the **operator app/cartable**, the **call center / telephony (IVR)**, and **internal services**.
 Identity is resolved via the sibling `sso-login-service`; attachments are referenced (not stored) via the sibling
 `files` service.
@@ -21,7 +21,7 @@ Identity is resolved via the sibling `sso-login-service`; attachments are refere
 | `Sso:UserInfoPath` | user-info endpoint | `/api/auth/me` |
 | `Files:BaseUrl` | files service base URL | `http://127.0.0.1:6000` |
 | `Files:GetFilePath` | file-metadata endpoint | `/api/files/{id}` |
-| `Files:ServiceToken` | service-to-service JWT (files service) | **not yet provided — TODO (Open Item)** |
+| `Files:ServiceToken` | service-to-service JWT (files service) | **not yet provided â€” TODO (Open Item)** |
 | `Files:ValidationEnabled` | validate fileIds against files service | `false` in dev (SSO/files unreachable here) |
 | `InternalAuth:HeaderName` | API key header for internal channels | `X-Api-Key` |
 | `InternalAuth:ApiKeys` | allowed API keys (name + key) | `dev-internal-key-137` (name `TelephonyDev`) |
@@ -34,7 +34,7 @@ Identity is resolved via the sibling `sso-login-service`; attachments are refere
 > dev connection string / API key from `appsettings.Development.json` are used. Switch to `Production` later by
 > uncommenting the `Environment=` overrides in the systemd unit and setting `Swagger:Enabled=true`.
 
-**Port:** `5050` (dev: `http://127.0.0.1:5050`) · **Health:** `GET /health` and `GET /api/health` (DB `SELECT 1`).
+**Port:** `5006` (dev: `http://127.0.0.1:5006`) Â· **Health:** `GET /health` and `GET /api/health` (DB `SELECT 1`).
 
 ## 3. Auth model
 
@@ -47,15 +47,15 @@ Three kinds of callers are resolved in `RequestService.CreateAsync`:
 | `PhoneCall` (call center / IVR) | `X-Api-Key` **or** SSO bearer | `ExternalService` / `Operator` |
 | `InternalService` | `X-Api-Key` (mandatory) | `ExternalService` |
 
-- SSO integration: `GET {Sso:BaseUrl}{Sso:UserInfoPath}` with `Authorization: Bearer <token>` →
-  `{ success, data: { id, melliCode, phone } }`. Token invalid/expired → 401 `UNAUTHORIZED`; SSO down → 503
+- SSO integration: `GET {Sso:BaseUrl}{Sso:UserInfoPath}` with `Authorization: Bearer <token>` â†’
+  `{ success, data: { id, melliCode, phone } }`. Token invalid/expired â†’ 401 `UNAUTHORIZED`; SSO down â†’ 503
   `DEPENDENCY_UNAVAILABLE` (with retry + circuit breaker).
 - For citizen channels the token identity (national code) is authoritative; a conflicting body `nationalCode` is rejected.
 - For `PhoneCall`, the national code may come from the body; the source phone is stored in `CreatedBySourcePhone`.
 
-## 4. API — Phase 1 (implemented)
+## 4. API â€” Phase 1 (implemented)
 
-### `POST /api/v1/requests` → `201 Created`
+### `POST /api/v1/requests` â†’ `201 Created`
 Request body (all fields optional except `channel`; FluentValidation is channel-aware):
 
 ```json
@@ -74,11 +74,11 @@ Validation rules (400 `VALIDATION_ERROR`, first error message):
 - `CitizenMobileApp`/`CitizenWebApp`: SSO token required (401 if missing).
 - `OperatorApp`/`CitizenMobileApp`/`CitizenWebApp`: citizen **required**, `nationalCode` exactly 10 digits.
 - `PhoneCall`/`InternalService`: no citizen required (call center may register without identity).
-- `location` required for `CitizenMobileApp`; `lat`/`lng` within valid ranges; `description` ≤ 2000.
+- `location` required for `CitizenMobileApp`; `lat`/`lng` within valid ranges; `description` â‰¤ 2000.
 - `fileIds`: each must be a valid GUID if present; duplicates rejected (DB unique index).
 - With `Files:ValidationEnabled=true`, each fileId must exist in the files service (else 400 or 503 if service down).
 
-### Reserved (Phase 2+) — all return `501 NOT_IMPLEMENTED`
+### Reserved (Phase 2+) â€” all return `501 NOT_IMPLEMENTED`
 - `GET /api/v1/requests/{id:guid}`
 - `GET /api/v1/requests/by-tracking-code/{code}`
 - `GET /api/v1/requests` (search / cartable: `status`, `currentGroupId`, `from`, `to`)
@@ -103,50 +103,50 @@ All errors, including model-binding failures, return `{ "code": "...", "message"
 
 Tables (all in `apiweb-137service`, enums stored as strings, GUID PKs). Migrations: `20260812061144_InitialCreate`.
 
-**`Requests`** — current snapshot only (no redundant PII; only NationalCode).
+**`Requests`** â€” current snapshot only (no redundant PII; only NationalCode).
 
 | column | notes |
 |---|---|
 | `Id` | GUID PK |
 | `TrackingCode` | `137-<yyyyMMdd Jalali>-<6-digit seq>` (e.g. `137-14050521-000004`), **unique index**, from DB sequence |
 | `NationalCode` | nullable (unverified telephony) |
-| `Description` | ≤ 2000 |
+| `Description` | â‰¤ 2000 |
 | `LocationLat` / `LocationLng` | precision 18,6 |
 | `Channel` / `Status` | string enums (`RequestChannel`, `RequestStatus`) |
 | `CurrentGroupId` | nullable until referral |
 | `CreatedBySourcePhone` | call-center scenario |
 | `CreatedAtUtc` / `UpdatedAtUtc` | |
 
-**`RequestFiles`** — link to files-service attachments (bytes never stored here).
+**`RequestFiles`** â€” link to files-service attachments (bytes never stored here).
 
 | column | notes |
 |---|---|
 | `Id` | GUID PK |
-| `RequestId` | FK → Requests (cascade) |
-| `FileId` | files-service GUID (string, ≤64) |
+| `RequestId` | FK â†’ Requests (cascade) |
+| `FileId` | files-service GUID (string, â‰¤64) |
 | `FileType` | derived from extension/mime: `Audio|Image|Video|Other` |
 | unique index `(RequestId, FileId)` |
 
-**`RequestLogs`** — append-only audit/event log (never updated/deleted).
+**`RequestLogs`** â€” append-only audit/event log (never updated/deleted).
 
 | column | notes |
 |---|---|
 | `Id` | GUID PK |
-| `RequestId` | FK → Requests (cascade) |
+| `RequestId` | FK â†’ Requests (cascade) |
 | `ActionType` | `Created`, `ReviewedByOperator`, `Confirmed`, `Referred`, `GroupChanged`, `Rejected`, `StatusChanged`, `Updated`, `Closed`, `Canceled` |
 | `ActorType` / `ActorId` | `System|Operator|Citizen|ExternalService` + id |
 | `PreviousStatus`/`NewStatus`, `PreviousGroupId`/`NewGroupId` | status/group transitions |
 | `Description` | free-form JSON metadata (see Open Item) |
 
 **Sequence:** `dbo.RequestTrackingCodeSeq` (`START 1, NO CYCLE, CACHE 50`) consumed via ADO.NET `NEXT VALUE FOR`
-(EF forbids it in subqueries). Race-safe: sequence + unique index; proven with 5 parallel POSTs → 5 distinct codes.
+(EF forbids it in subqueries). Race-safe: sequence + unique index; proven with 5 parallel POSTs â†’ 5 distinct codes.
 
 ## 7. Transactionality
 
 `RequestRepository.CreateAsync` runs inside `SqlServerRetryingExecutionStrategy` (transient-fault retry).
-Every retry clears the change tracker and re-runs the whole work (sequence read → inserts → commit) so a
+Every retry clears the change tracker and re-runs the whole work (sequence read â†’ inserts â†’ commit) so a
 retry never double-inserts. The 500 seen mid-development ("FK_RequestFiles_Requests_RequestId" violation) was caused
-by EF not ordering separately-added children before the parent insert — fixed by setting `file.Request = entity` /
+by EF not ordering separately-added children before the parent insert â€” fixed by setting `file.Request = entity` /
 `createdLog.Request = entity` navigations.
 
 ## 8. Integration dependencies
@@ -171,19 +171,19 @@ by EF not ordering separately-added children before the parent insert — fixed 
    until then real fileId validation cannot run (`ValidationEnabled=false` in dev).
 4. **DB confirmed:** engine SQL Server 2019 at `185.255.91.242,2019`; DB `apiweb-137service` (user is db_owner).
 5. **CORS origins:** final web-app origins must be confirmed and set in `Cors:AllowedOrigins` for prod.
-6. **Domain + nginx:** target domain `apiweb-137request.sabzevar.ir`, port 5050 — nginx/systemd/Docker configs are
+6. **Domain + nginx:** target domain `apiweb-137request.sabzevar.ir`, port 5006 â€” nginx/systemd/Docker configs are
    included in the repo (see `deploy/`, `Dockerfile`, `docker-compose.yml`) but the server-side install is not done.
    The service runs in **Development** mode so Swagger is reachable at `/swagger`.
 
 ## 10. Run / test (dev)
 
 ```
-dotnet run --project src/RequestService.Api   # → http://127.0.0.1:5050, Swagger at /swagger
-curl -X POST http://127.0.0.1:5050/api/v1/requests -H "Content-Type: application/json" \
+dotnet run --project src/RequestService.Api   # â†’ http://127.0.0.1:5006, Swagger at /swagger
+curl -X POST http://127.0.0.1:5006/api/v1/requests -H "Content-Type: application/json" \
      -H "X-Api-Key: dev-internal-key-137" --data @body.json
 ```
 
-Verified (live DB): `/health` Healthy; PhoneCall+key → 201 + tracking code; missing key → 401; missing location
-(citizen app) → 400; invalid nationalCode → 400; invalid fileId format → 400; citizen app without token → 401;
-citizen app with fake token (SSO down) → 503; request with 2 fileIds → 201 (FK ordering fixed);
-5 parallel POSTs → 5 unique tracking codes; reserved routes → 501.
+Verified (live DB): `/health` Healthy; PhoneCall+key â†’ 201 + tracking code; missing key â†’ 401; missing location
+(citizen app) â†’ 400; invalid nationalCode â†’ 400; invalid fileId format â†’ 400; citizen app without token â†’ 401;
+citizen app with fake token (SSO down) â†’ 503; request with 2 fileIds â†’ 201 (FK ordering fixed);
+5 parallel POSTs â†’ 5 unique tracking codes; reserved routes â†’ 501.

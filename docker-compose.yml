@@ -6,7 +6,7 @@
 #
 # Usage:
 #   docker compose up --build
-#   Swagger: http://localhost:5050/swagger
+#   Swagger: http://localhost:5006/swagger
 
 services:
   app:
@@ -17,11 +17,11 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5050
+      ASPNETCORE_URLS: http://+:5006
       # sso-login-service and files service as reachable from the Docker host.
       # (appsettings.Development.json points at 127.0.0.1, which inside a container
       #  is the container itself, so we override with host.docker.internal.)
       Sso__BaseUrl: "http://host.docker.internal:5001"
       Files__BaseUrl: "http://host.docker.internal:6000"
     ports:
-      - "5050:5050"
+      - "5006:5006"

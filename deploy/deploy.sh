@@ -2,7 +2,7 @@
 
 # ============================================
 # Deploy Script - Request Service (ثبت درخواست)
-# apiweb-137request.sabzevar.ir :5050
+# apiweb-137request.sabzevar.ir :5006
 # Runs in Development so Swagger UI is available at /swagger.
 # ============================================
 set -e
