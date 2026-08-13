@@ -22,6 +22,7 @@ public sealed class RequestService : IRequestService
     private readonly IFileServiceClient _fileServiceClient;
     private readonly ITrackingCodeGenerator _trackingCodeGenerator;
     private readonly IRequestRepository _repository;
+    private readonly IReferralBootstrapClient _referralBootstrapClient;
     private readonly IOptions<InternalAuthOptions> _internalAuthOptions;
     private readonly IOptions<FilesOptions> _filesOptions;
     private readonly ILogger<RequestService> _logger;
@@ -32,6 +33,7 @@ public sealed class RequestService : IRequestService
         IFileServiceClient fileServiceClient,
         ITrackingCodeGenerator trackingCodeGenerator,
         IRequestRepository repository,
+        IReferralBootstrapClient referralBootstrapClient,
         IOptions<InternalAuthOptions> internalAuthOptions,
         IOptions<FilesOptions> filesOptions,
         ILogger<RequestService> logger)
@@ -41,6 +43,7 @@ public sealed class RequestService : IRequestService
         _fileServiceClient = fileServiceClient;
         _trackingCodeGenerator = trackingCodeGenerator;
         _repository = repository;
+        _referralBootstrapClient = referralBootstrapClient;
         _internalAuthOptions = internalAuthOptions;
         _filesOptions = filesOptions;
         _logger = logger;
@@ -123,8 +126,196 @@ public sealed class RequestService : IRequestService
             "Request {RequestId} created with tracking code {TrackingCode} via {Channel}",
             requestId, trackingCode, request.Channel);
 
+        // ---------- 8. Best-effort start of referral workflow (must not fail create) ----------
+        await _referralBootstrapClient.TryBootstrapAsync(
+            requestId,
+            entity.Description,
+            entity.LocationLat.HasValue ? (double)entity.LocationLat.Value : null,
+            entity.LocationLng.HasValue ? (double)entity.LocationLng.Value : null,
+            ct);
+
         return new CreateRequestResponse(requestId, trackingCode);
     }
+
+    public async Task<RequestDetailResponse> GetByIdAsync(
+        Guid id,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct)
+    {
+        await EnsureAuthenticatedAsync(authorizationHeader, apiKeyHeader, ct);
+
+        var entity = await _repository.GetByIdAsync(id, ct)
+            ?? throw new NotFoundException($"Request '{id}' was not found.");
+
+        return ToDetail(entity);
+    }
+
+    public async Task<UpdateRequestStatusResponse> UpdateStatusAsync(
+        Guid id,
+        UpdateRequestStatusRequest request,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct)
+    {
+        await EnsureInternalOrBearerAsync(authorizationHeader, apiKeyHeader, ct);
+
+        if (string.IsNullOrWhiteSpace(request.Status)
+            || !Enum.TryParse<RequestStatus>(request.Status.Trim(), ignoreCase: true, out var newStatus))
+        {
+            throw new DomainValidationException(
+                $"Invalid status '{request.Status}'. Allowed: {string.Join(", ", Enum.GetNames<RequestStatus>())}.");
+        }
+
+        var entity = await _repository.GetByIdAsync(id, ct)
+            ?? throw new NotFoundException($"Request '{id}' was not found.");
+
+        // Idempotent: same status → success without a duplicate log noise... still OK to log once.
+        if (entity.Status == newStatus)
+        {
+            return new UpdateRequestStatusResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId);
+        }
+
+        var previous = entity.Status;
+        entity.Status = newStatus;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        var log = new RequestLogItem
+        {
+            Id = Guid.NewGuid(),
+            RequestId = entity.Id,
+            ActionType = MapStatusAction(newStatus),
+            ActorType = ActorType.ExternalService,
+            ActorId = ResolveApiKeyName(apiKeyHeader) ?? "referral-service",
+            PreviousStatus = previous.ToString(),
+            NewStatus = newStatus.ToString(),
+            Description = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+            CreatedAtUtc = DateTime.UtcNow,
+            Request = entity
+        };
+
+        await _repository.UpdateStatusAsync(entity, log, ct);
+
+        _logger.LogInformation(
+            "Request {RequestId} status changed {From} → {To}",
+            id, previous, newStatus);
+
+        return new UpdateRequestStatusResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId);
+    }
+
+    public async Task<ReferRequestResponse> ReferAsync(
+        Guid id,
+        ReferRequestRequest request,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct)
+    {
+        await EnsureInternalOrBearerAsync(authorizationHeader, apiKeyHeader, ct);
+
+        if (string.IsNullOrWhiteSpace(request.ToGroupId))
+        {
+            throw new DomainValidationException("toGroupId is required.");
+        }
+
+        var toGroupId = request.ToGroupId.Trim();
+        var entity = await _repository.GetByIdAsync(id, ct)
+            ?? throw new NotFoundException($"Request '{id}' was not found.");
+
+        // Idempotent refer to the same group.
+        if (string.Equals(entity.CurrentGroupId, toGroupId, StringComparison.Ordinal)
+            && entity.Status == RequestStatus.Referred)
+        {
+            return new ReferRequestResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId!);
+        }
+
+        var previousGroup = entity.CurrentGroupId;
+        var previousStatus = entity.Status;
+        entity.Status = RequestStatus.Referred;
+        entity.CurrentGroupId = toGroupId;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        var log = new RequestLogItem
+        {
+            Id = Guid.NewGuid(),
+            RequestId = entity.Id,
+            ActionType = RequestActionType.Referred,
+            ActorType = ActorType.ExternalService,
+            ActorId = ResolveApiKeyName(apiKeyHeader) ?? "referral-service",
+            PreviousStatus = previousStatus.ToString(),
+            NewStatus = RequestStatus.Referred.ToString(),
+            PreviousGroupId = previousGroup,
+            NewGroupId = toGroupId,
+            Description = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+            CreatedAtUtc = DateTime.UtcNow,
+            Request = entity
+        };
+
+        await _repository.ReferAsync(entity, toGroupId, log, ct);
+
+        _logger.LogInformation(
+            "Request {RequestId} referred to group {GroupId}",
+            id, toGroupId);
+
+        return new ReferRequestResponse(entity.Id, entity.Status.ToString(), toGroupId);
+    }
+
+    private async Task EnsureAuthenticatedAsync(string? authorizationHeader, string? apiKeyHeader, CancellationToken ct)
+    {
+        if (IsValidApiKey(apiKeyHeader))
+        {
+            return;
+        }
+
+        var bearer = ExtractBearerToken(authorizationHeader);
+        if (string.IsNullOrEmpty(bearer))
+        {
+            throw new NotAuthenticatedException("An Authorization: Bearer token or X-Api-Key is required.");
+        }
+
+        _ = await ValidateSsoTokenAsync(bearer, ct);
+    }
+
+    private async Task EnsureInternalOrBearerAsync(string? authorizationHeader, string? apiKeyHeader, CancellationToken ct)
+    {
+        if (IsValidApiKey(apiKeyHeader))
+        {
+            return;
+        }
+
+        var bearer = ExtractBearerToken(authorizationHeader);
+        if (string.IsNullOrEmpty(bearer))
+        {
+            throw new NotAuthenticatedException(
+                "Status/refer endpoints require a valid X-Api-Key (service) or Authorization: Bearer token.");
+        }
+
+        _ = await ValidateSsoTokenAsync(bearer, ct);
+    }
+
+    private static RequestActionType MapStatusAction(RequestStatus status) => status switch
+    {
+        RequestStatus.Rejected => RequestActionType.Rejected,
+        RequestStatus.Closed => RequestActionType.Closed,
+        RequestStatus.Canceled => RequestActionType.Canceled,
+        RequestStatus.Referred => RequestActionType.Referred,
+        _ => RequestActionType.StatusChanged
+    };
+
+    private static RequestDetailResponse ToDetail(Request entity)
+        => new(
+            entity.Id,
+            entity.TrackingCode,
+            entity.NationalCode,
+            entity.Description,
+            entity.LocationLat.HasValue ? (double)entity.LocationLat.Value : null,
+            entity.LocationLng.HasValue ? (double)entity.LocationLng.Value : null,
+            entity.Channel.ToString(),
+            entity.Status.ToString(),
+            entity.CurrentGroupId,
+            entity.CreatedBySourcePhone,
+            entity.CreatedAtUtc,
+            entity.UpdatedAtUtc,
+            entity.Files.Select(f => new RequestFileDto(f.FileId, f.FileType.ToString(), f.CreatedAtUtc)).ToList());
 
     private async Task<CallerContext> ResolveCallerAsync(
         RequestChannel channel,

@@ -14,4 +14,20 @@ public interface IRequestService
         string? authorizationHeader,
         string? apiKeyHeader,
         CancellationToken ct);
+
+    Task<RequestDetailResponse> GetByIdAsync(Guid id, string? authorizationHeader, string? apiKeyHeader, CancellationToken ct);
+
+    Task<UpdateRequestStatusResponse> UpdateStatusAsync(
+        Guid id,
+        UpdateRequestStatusRequest request,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct);
+
+    Task<ReferRequestResponse> ReferAsync(
+        Guid id,
+        ReferRequestRequest request,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct);
 }

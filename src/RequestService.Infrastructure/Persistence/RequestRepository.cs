@@ -97,6 +97,7 @@ public sealed class RequestRepository : IRequestRepository
         await RunInTransactionAsync(async () =>
         {
             request.CurrentGroupId = toGroupId;
+            request.Status = RequestStatus.Referred;
             request.UpdatedAtUtc = DateTime.UtcNow;
             _db.Requests.Update(request);
             _db.RequestLogs.Add(log);
