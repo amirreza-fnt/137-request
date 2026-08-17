@@ -288,11 +288,9 @@ public sealed class RequestService : IRequestService
 
     private static string? ResolveListenUrl(string? storedUrl, string fileId)
     {
-        if (!string.IsNullOrWhiteSpace(storedUrl))
-        {
-            return storedUrl;
-        }
-
+        // Always proxy through request-service so playback never depends on a LAN IP
+        // stored by Issabel (listenUrl=...) or on direct files-service auth in the browser.
+        _ = storedUrl;
         if (string.IsNullOrWhiteSpace(fileId))
         {
             return null;
