@@ -151,6 +151,19 @@ public sealed class RequestService : IRequestService
         return ToDetail(entity);
     }
 
+    public async Task<RequestDetailResponse> GetByTrackingCodeAsync(string code, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new DomainValidationException("Tracking code is required.");
+        }
+
+        var entity = await _repository.FindByTrackingCodeFlexibleAsync(code.Trim(), ct)
+            ?? throw new NotFoundException($"Request with tracking code '{code}' was not found.");
+
+        return ToDetail(entity);
+    }
+
     public async Task<UpdateRequestStatusResponse> UpdateStatusAsync(
         Guid id,
         UpdateRequestStatusRequest request,

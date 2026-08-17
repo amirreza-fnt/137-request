@@ -19,6 +19,12 @@ public interface IRequestRepository
 
     Task<Request?> GetByTrackingCodeAsync(string trackingCode, CancellationToken ct);
 
+    /// <summary>
+    /// Finds by full tracking code OR digit-only form (AGI say_digits strips dashes),
+    /// e.g. 13714050517000001 ↔ 137-14050517-000001.
+    /// </summary>
+    Task<Request?> FindByTrackingCodeFlexibleAsync(string codeOrDigits, CancellationToken ct);
+
     /// <summary>Atomic insert of the request + files + Created log event.</summary>
     Task CreateAsync(Request request, IReadOnlyCollection<RequestFile> files, RequestLogItem createdLog, CancellationToken ct);
 

@@ -17,6 +17,9 @@ public interface IRequestService
 
     Task<RequestDetailResponse> GetByIdAsync(Guid id, string? authorizationHeader, string? apiKeyHeader, CancellationToken ct);
 
+    /// <summary>Citizen / IVR lookup by tracking code (full or digit-only from TTS).</summary>
+    Task<RequestDetailResponse> GetByTrackingCodeAsync(string code, CancellationToken ct);
+
     Task<UpdateRequestStatusResponse> UpdateStatusAsync(
         Guid id,
         UpdateRequestStatusRequest request,

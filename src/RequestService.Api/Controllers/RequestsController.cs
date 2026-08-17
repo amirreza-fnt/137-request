@@ -69,13 +69,15 @@ public sealed class RequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets a single request by its tracking code.
-    /// TODO(next phase): cartable search / citizen tracking UX.
+    /// Gets a single request by tracking code (full <c>137-yyyyMMdd-000001</c>
+    /// or digit-only form spoken by Issabel TTS).
+    /// Public read for citizen / IVR tracking.
     /// </summary>
     [HttpGet("by-tracking-code/{code}")]
-    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
-    public IActionResult GetByTrackingCode(string code)
-        => throw new NotImplementedException("GET /api/v1/requests/by-tracking-code/{code}");
+    [ProducesResponseType(typeof(RequestDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RequestDetailResponse>> GetByTrackingCode(string code, CancellationToken cancellationToken)
+        => Ok(await _requestService.GetByTrackingCodeAsync(code, cancellationToken));
 
     /// <summary>
     /// Searches the cartable by status, group and/or date range.

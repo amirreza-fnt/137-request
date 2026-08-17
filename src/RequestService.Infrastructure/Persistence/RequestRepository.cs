@@ -62,6 +62,47 @@ public sealed class RequestRepository : IRequestRepository
             .Include(r => r.Files)
             .FirstOrDefaultAsync(r => r.TrackingCode == trackingCode, ct);
 
+    public async Task<Request?> FindByTrackingCodeFlexibleAsync(string codeOrDigits, CancellationToken ct)
+    {
+        var raw = (codeOrDigits ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            return null;
+        }
+
+        var exact = await GetByTrackingCodeAsync(raw, ct);
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        var digits = new string(raw.Where(char.IsDigit).ToArray());
+        if (digits.Length == 0)
+        {
+            return null;
+        }
+
+        // Reconstruct canonical form: 137 + yyyyMMdd(8) + seq(6) → 137-yyyyMMdd-seq
+        if (digits.Length == 17 && digits.StartsWith("137", StringComparison.Ordinal))
+        {
+            var reconstructed = $"137-{digits.Substring(3, 8)}-{digits.Substring(11, 6)}";
+            var byReconstructed = await GetByTrackingCodeAsync(reconstructed, ct);
+            if (byReconstructed is not null)
+            {
+                return byReconstructed;
+            }
+        }
+
+        // Compare digit-only form in SQL (for partial / TTS digit strings)
+        return await _db.Requests
+            .Include(r => r.Files)
+            .AsNoTracking()
+            .Where(r => r.TrackingCode.Replace("-", "") == digits
+                        || r.TrackingCode.Replace("-", "").EndsWith(digits))
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task CreateAsync(
         Request request,
         IReadOnlyCollection<RequestFile> files,
