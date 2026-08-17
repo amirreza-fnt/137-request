@@ -69,11 +69,25 @@ public static class DependencyInjection
         });
 
         var files = configuration.GetSection(FilesOptions.SectionName).Get<FilesOptions>() ?? new FilesOptions();
-        services.AddHttpClient<IFileServiceClient, FileServiceClient>(client =>
+        var filesBuilder = services.AddHttpClient<IFileServiceClient, FileServiceClient>(client =>
         {
-            client.BaseAddress = new Uri(EnsureTrailingSlash(files.BaseUrl));
+            if (!string.IsNullOrWhiteSpace(files.BaseUrl))
+            {
+                client.BaseAddress = new Uri(EnsureTrailingSlash(files.BaseUrl));
+            }
+
             client.Timeout = TimeSpan.FromSeconds(files.TimeoutSeconds + 5);
-        }).AddStandardResilienceHandler(opt =>
+        });
+
+        if (files.AllowInvalidSslCertificate)
+        {
+            filesBuilder.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+        }
+
+        filesBuilder.AddStandardResilienceHandler(opt =>
         {
             opt.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(files.TimeoutSeconds + 2);
             opt.AttemptTimeout.Timeout = TimeSpan.FromSeconds(files.TimeoutSeconds);

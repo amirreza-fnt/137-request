@@ -32,6 +32,9 @@ public sealed class FilesOptions
     /// <summary>Public base URL for direct /i/ links when files are Public.</summary>
     public string? PublicBaseUrl { get; set; }
 
+    /// <summary>Accept self-signed TLS when calling the files service (LAN demo).</summary>
+    public bool AllowInvalidSslCertificate { get; set; }
+
     public int TimeoutSeconds { get; set; } = 10;
     public int RetryCount { get; set; } = 2;
 }

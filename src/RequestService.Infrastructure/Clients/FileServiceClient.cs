@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -34,6 +35,8 @@ public sealed class FileServiceClient : IFileServiceClient
 
     public async Task<FileStreamResult?> StreamFileAsync(string fileId, CancellationToken ct)
     {
+        EnsureFilesBaseUrl();
+
         var meta = await GetFileInternalAsync(fileId, ct);
         if (meta is null || string.IsNullOrWhiteSpace(meta.ShortCode))
         {
@@ -43,7 +46,7 @@ public sealed class FileServiceClient : IFileServiceClient
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/i/{meta.ShortCode}");
         ApplyAuth(request);
 
-        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
@@ -55,14 +58,30 @@ public sealed class FileServiceClient : IFileServiceClient
                 $"Files service returned HTTP {(int)response.StatusCode} while streaming '{fileId}'.");
         }
 
-        var stream = await response.Content.ReadAsStreamAsync(ct);
+        await using var network = await response.Content.ReadAsStreamAsync(ct);
+        var buffer = new MemoryStream();
+        await network.CopyToAsync(buffer, ct);
+        buffer.Position = 0;
+
         var contentType = response.Content.Headers.ContentType?.MediaType ?? meta.MimeType ?? "audio/wav";
-        var fileName = $"recording-{fileId}{meta.Extension ?? ".wav"}";
-        return new FileStreamResult(stream, contentType, fileName);
+        var extension = meta.Extension;
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".wav";
+        }
+        else if (!extension.StartsWith('.'))
+        {
+            extension = "." + extension;
+        }
+
+        var fileName = $"recording-{fileId}{extension}";
+        return new FileStreamResult(buffer, contentType, fileName);
     }
 
     private async Task<FileMetadataDto?> GetFileInternalAsync(string fileId, CancellationToken ct)
     {
+        EnsureFilesBaseUrl();
+
         if (!Guid.TryParse(fileId, out _))
         {
             return null;
@@ -74,7 +93,7 @@ public sealed class FileServiceClient : IFileServiceClient
 
         try
         {
-            var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -105,7 +124,12 @@ public sealed class FileServiceClient : IFileServiceClient
                 info.Extension,
                 info.MimeType,
                 info.ShortCode,
-                info.AccessType);
+                info.AccessType.ValueKind == JsonValueKind.Undefined ? null : info.AccessType.ToString());
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Unexpected JSON from files service for fileId {FileId}.", fileId);
+            throw new DependencyUnavailableException("Files service returned invalid metadata.", ex);
         }
         catch (HttpRequestException ex)
         {
@@ -116,6 +140,15 @@ public sealed class FileServiceClient : IFileServiceClient
         {
             _logger.LogWarning(ex, "Files service timed out while reading fileId {FileId}.", fileId);
             throw new DependencyUnavailableException("Files service timed out.", ex);
+        }
+    }
+
+    private void EnsureFilesBaseUrl()
+    {
+        if (string.IsNullOrWhiteSpace(_options.Value.BaseUrl))
+        {
+            throw new DependencyUnavailableException(
+                "Files:BaseUrl is not configured on request-service.");
         }
     }
 
@@ -167,6 +200,8 @@ public sealed class FileServiceClient : IFileServiceClient
         public string? ShortCode { get; set; }
         public string? Extension { get; set; }
         public string? MimeType { get; set; }
-        public string? AccessType { get; set; }
+
+        // files API serializes enum as number (TokenProtected = 2)
+        public JsonElement AccessType { get; set; }
     }
 }

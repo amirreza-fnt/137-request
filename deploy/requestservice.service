@@ -13,6 +13,8 @@ Environment=ASPNETCORE_ENVIRONMENT=Development
 # Service listens on port 5006 (behind nginx)
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5006
 
+EnvironmentFile=-/etc/requestservice.env
+
 # --- Optional overrides. In Development these all come from appsettings.Development.json ---
 # Remote MSSQL connection string (server IP:port) - maps to ConnectionStrings:Requests
 # NOTE: value contains spaces/;/# so it MUST be double-quoted for systemd to parse it correctly.
