@@ -52,6 +52,10 @@ public sealed class RequestRepository : IRequestRepository
         => await _db.Requests.AsNoTracking()
             .AnyAsync(r => r.TrackingCode == trackingCode, ct);
 
+    public async Task<bool> RequestFileExistsAsync(string fileId, CancellationToken ct)
+        => await _db.RequestFiles.AsNoTracking()
+            .AnyAsync(f => f.FileId == fileId, ct);
+
     public async Task<Request?> GetByIdAsync(Guid id, CancellationToken ct)
         => await _db.Requests
             .Include(r => r.Files)

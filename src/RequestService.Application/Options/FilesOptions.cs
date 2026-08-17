@@ -23,6 +23,15 @@ public sealed class FilesOptions
     /// <summary>When false, fileId existence is not checked (development/demo only).</summary>
     public bool ValidationEnabled { get; set; } = true;
 
+    /// <summary>JWT signing key shared with the files service (demo audio proxy).</summary>
+    public string? JwtKey { get; set; }
+
+    public string? JwtIssuer { get; set; }
+    public string? JwtAudience { get; set; }
+
+    /// <summary>Public base URL for direct /i/ links when files are Public.</summary>
+    public string? PublicBaseUrl { get; set; }
+
     public int TimeoutSeconds { get; set; } = 10;
     public int RetryCount { get; set; } = 2;
 }

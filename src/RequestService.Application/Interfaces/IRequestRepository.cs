@@ -15,6 +15,8 @@ public interface IRequestRepository
 
     Task<bool> TrackingCodeExistsAsync(string trackingCode, CancellationToken ct);
 
+    Task<bool> RequestFileExistsAsync(string fileId, CancellationToken ct);
+
     Task<Request?> GetByIdAsync(Guid id, CancellationToken ct);
 
     Task<Request?> GetByTrackingCodeAsync(string trackingCode, CancellationToken ct);

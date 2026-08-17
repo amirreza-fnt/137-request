@@ -212,7 +212,7 @@ public sealed class RequestService : IRequestService
                 f.FileId,
                 f.FileType.ToString(),
                 f.CreatedAtUtc,
-                index == 0 ? listenUrl : null))
+                index == 0 ? ResolveListenUrl(listenUrl, f.FileId) : null))
             .ToList();
 
         var phone = entity.CreatedBySourcePhone ?? logPhone;
@@ -284,6 +284,21 @@ public sealed class RequestService : IRequestService
         }
 
         return null;
+    }
+
+    private static string? ResolveListenUrl(string? storedUrl, string fileId)
+    {
+        if (!string.IsNullOrWhiteSpace(storedUrl))
+        {
+            return storedUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(fileId))
+        {
+            return null;
+        }
+
+        return $"/api/v1/demo/files/{fileId}/audio";
     }
 
     private async Task<CallerContext> ResolveCallerAsync(

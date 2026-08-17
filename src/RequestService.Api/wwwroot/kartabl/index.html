@@ -124,10 +124,20 @@
     }
 
     function audioCell(item) {
-      const url = (item.files || []).map(f => f.listenUrl).find(Boolean);
+      const file = (item.files || [])[0];
+      if (!file) {
+        return '<span class="muted">فایل صوتی ندارد</span>';
+      }
+
+      const key = saveKey();
+      let url = file.listenUrl;
+      if (url && url.startsWith("/api/v1/demo/")) {
+        url += (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key);
+      }
       if (!url) {
         return '<span class="muted">فایل صوتی ندارد</span>';
       }
+
       return '<audio controls preload="none" src="' + url + '"></audio>'
         + '<a href="' + url + '" target="_blank" rel="noreferrer">دانلود</a>';
     }
