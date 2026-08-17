@@ -20,8 +20,8 @@ public interface IRequestRepository
     Task<Request?> GetByTrackingCodeAsync(string trackingCode, CancellationToken ct);
 
     /// <summary>
-    /// Finds by full tracking code OR digit-only form (AGI say_digits strips dashes),
-    /// e.g. 13714050517000001 ↔ 137-14050517-000001.
+    /// Full tracking code or digit-only form (AGI <c>say_digits</c> strips dashes),
+    /// e.g. <c>13714050526-000010</c> ↔ <c>137-14050526-000010</c>.
     /// </summary>
     Task<Request?> FindByTrackingCodeFlexibleAsync(string codeOrDigits, CancellationToken ct);
 

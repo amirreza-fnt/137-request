@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>کارتابل درخواست‌های ۱۳۷</title>
+  <style>
+    body { font-family: Tahoma, Arial, sans-serif; margin: 16px; line-height: 1.5; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    .toolbar { margin-bottom: 12px; }
+    .toolbar label { margin-left: 8px; }
+    input, button { font: inherit; padding: 4px 8px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border: 1px solid #bbb; padding: 8px; vertical-align: top; text-align: right; }
+    th { background: #eee; }
+    tr:nth-child(even) { background: #fafafa; }
+    .muted { color: #666; font-size: 0.9rem; }
+    .err { color: #b00020; margin-top: 8px; }
+    audio { width: 240px; max-width: 100%; display: block; }
+    .empty { padding: 24px; text-align: center; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>کارتابل درخواست‌های ۱۳۷</h1>
+  <p class="muted">لیست درخواست‌های ثبت‌شده (تماس تلفنی و سایر کانال‌ها). فایل صوتی در همان ردیف قابل پخش است.</p>
+
+  <div class="toolbar">
+    <label>کلید دسترسی:</label>
+    <input id="apiKey" type="password" size="28" placeholder="X-Api-Key" />
+    <button type="button" id="btnLoad">بارگذاری مجدد</button>
+    <span id="status" class="muted"></span>
+  </div>
+  <p id="error" class="err"></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ردیف</th>
+        <th>کد رهگیری</th>
+        <th>نام</th>
+        <th>شماره تماس</th>
+        <th>کد ملی</th>
+        <th>کانال</th>
+        <th>وضعیت</th>
+        <th>نتیجه تماس</th>
+        <th>زمان ثبت</th>
+        <th>فایل صوتی</th>
+      </tr>
+    </thead>
+    <tbody id="rows">
+      <tr><td colspan="10" class="empty">در حال بارگذاری...</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    const STORAGE_KEY = "137-kartabl-api-key";
+    const apiKeyEl = document.getElementById("apiKey");
+    const rowsEl = document.getElementById("rows");
+    const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
+
+    const params = new URLSearchParams(location.search);
+    apiKeyEl.value = params.get("key") || localStorage.getItem(STORAGE_KEY) || "";
+
+    function saveKey() {
+      const key = apiKeyEl.value.trim();
+      if (key) localStorage.setItem(STORAGE_KEY, key);
+      return key;
+    }
+
+    function headers() {
+      const key = saveKey();
+      if (!key) throw new Error("کلید دسترسی (X-Api-Key) را وارد کنید.");
+      return { "X-Api-Key": key, "Accept": "application/json" };
+    }
+
+    function fullName(item) {
+      const parts = [item.citizenFirstName, item.citizenLastName].filter(Boolean);
+      return parts.length ? parts.join(" ") : "—";
+    }
+
+    function channelFa(ch) {
+      const map = {
+        PhoneCall: "تماس تلفنی",
+        CitizenMobileApp: "اپ موبایل",
+        CitizenWebApp: "وب",
+        OperatorApp: "اپ اپراتور",
+        InternalService: "سرویس داخلی"
+      };
+      return map[ch] || ch || "—";
+    }
+
+    function statusFa(st) {
+      const map = {
+        New: "جدید",
+        InReview: "در بررسی",
+        Confirmed: "تأیید شده",
+        Referred: "ارجاع شده",
+        Closed: "بسته",
+        Rejected: "رد شده",
+        Canceled: "لغو"
+      };
+      return map[st] || st || "—";
+    }
+
+    function outcomeFa(code) {
+      if (!code) return "—";
+      const map = {
+        NO_ANSWER: "بدون پاسخ اپراتور",
+        ANSWERED: "پاسخ داده شد",
+        QUEUE: "صف",
+        VOICEMAIL: "پیام صوتی"
+      };
+      return map[code] || code;
+    }
+
+    function formatTime(utc) {
+      if (!utc) return "—";
+      try {
+        return new Date(utc).toLocaleString("fa-IR");
+      } catch {
+        return utc;
+      }
+    }
+
+    function audioCell(item) {
+      const url = (item.files || []).map(f => f.listenUrl).find(Boolean);
+      if (!url) {
+        return '<span class="muted">فایل صوتی ندارد</span>';
+      }
+      return '<audio controls preload="none" src="' + url + '"></audio>'
+        + '<a href="' + url + '" target="_blank" rel="noreferrer">دانلود</a>';
+    }
+
+    function render(items) {
+      if (!items.length) {
+        rowsEl.innerHTML = '<tr><td colspan="10" class="empty">درخواستی ثبت نشده است.</td></tr>';
+        return;
+      }
+
+      rowsEl.innerHTML = items.map((item, i) => {
+        const phone = item.citizenPhone || item.createdBySourcePhone || "—";
+        return "<tr>"
+          + "<td>" + (i + 1) + "</td>"
+          + "<td><b>" + (item.trackingCode || "—") + "</b></td>"
+          + "<td>" + fullName(item) + "</td>"
+          + "<td>" + phone + "</td>"
+          + "<td>" + (item.nationalCode || "—") + "</td>"
+          + "<td>" + channelFa(item.channel) + "</td>"
+          + "<td>" + statusFa(item.status) + "</td>"
+          + "<td>" + outcomeFa(item.outcome) + "</td>"
+          + "<td>" + formatTime(item.createdAtUtc) + "</td>"
+          + "<td>" + audioCell(item) + "</td>"
+          + "</tr>";
+      }).join("");
+    }
+
+    async function load() {
+      errorEl.textContent = "";
+      statusEl.textContent = "در حال خواندن...";
+      try {
+        const res = await fetch("/api/v1/requests", { headers: headers() });
+        const text = await res.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : []; } catch { data = null; }
+        if (!res.ok) {
+          throw new Error((data && (data.message || data.code)) || ("خطای HTTP " + res.status));
+        }
+        const items = Array.isArray(data) ? data : [];
+        statusEl.textContent = items.length + " مورد — آخرین بروزرسانی: " + new Date().toLocaleTimeString("fa-IR");
+        render(items);
+      } catch (e) {
+        statusEl.textContent = "";
+        errorEl.textContent = e.message || String(e);
+        rowsEl.innerHTML = '<tr><td colspan="10" class="empty">بارگذاری ناموفق بود.</td></tr>';
+      }
+    }
+
+    document.getElementById("btnLoad").addEventListener("click", load);
+    apiKeyEl.addEventListener("change", saveKey);
+    load();
+  </script>
+</body>
+</html>

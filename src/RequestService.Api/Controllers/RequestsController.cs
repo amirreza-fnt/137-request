@@ -7,8 +7,9 @@ using RequestService.Application.Options;
 namespace RequestService.Api.Controllers;
 
 /// <summary>
-/// Request lifecycle endpoints: create, read, status sync and group referral.
-/// Status/refer are consumed by referral-service via X-Api-Key (Saga-lite outbox).
+/// Request lifecycle endpoints.
+/// POST create, GET by id / tracking code / search are implemented;
+/// status and refer remain reserved for a later phase.
 /// </summary>
 [ApiController]
 [Route("api/v1/requests")]
@@ -28,7 +29,6 @@ public sealed class RequestsController : ControllerBase
     /// Registers a new citizen request and returns its id + unique tracking code.
     /// Authentication: SSO bearer token (citizen/operator) or X-Api-Key for
     /// internal-service channels (PhoneCall / InternalService).
-    /// After create, best-effort bootstraps the first referral workflow step.
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(CreateRequestResponse), StatusCodes.Status201Created)]
@@ -58,87 +58,73 @@ public sealed class RequestsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RequestDetailResponse>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var authorization = Request.Headers.Authorization.ToString();
-        var apiKey = Request.Headers[_internalAuth.Value.HeaderName].ToString();
-
-        return Ok(await _requestService.GetByIdAsync(
-            id,
-            string.IsNullOrWhiteSpace(authorization) ? null : authorization,
-            string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-            cancellationToken));
+        var response = await _requestService.GetByIdAsync(id, AuthHeader(), ApiKeyHeader(), cancellationToken);
+        return Ok(response);
     }
 
     /// <summary>
-    /// Gets a single request by tracking code (full <c>137-yyyyMMdd-000001</c>
-    /// or digit-only form spoken by Issabel TTS).
-    /// Public read for citizen / IVR tracking.
+    /// Gets a request by tracking code. Accepts dashed form
+    /// (<c>137-14050526-000010</c>) or digits-only TTS form.
     /// </summary>
     [HttpGet("by-tracking-code/{code}")]
     [ProducesResponseType(typeof(RequestDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<RequestDetailResponse>> GetByTrackingCode(string code, CancellationToken cancellationToken)
-        => Ok(await _requestService.GetByTrackingCodeAsync(code, cancellationToken));
+    public async Task<ActionResult<RequestDetailResponse>> GetByTrackingCode(
+        string code,
+        CancellationToken cancellationToken)
+    {
+        var response = await _requestService.GetByTrackingCodeAsync(
+            code,
+            AuthHeader(),
+            ApiKeyHeader(),
+            cancellationToken);
+        return Ok(response);
+    }
 
-    /// <summary>
-    /// Searches the cartable by status, group and/or date range.
-    /// TODO(next phase): implement.
-    /// </summary>
+    /// <summary>Lists recent requests (newest first, max 200). Filter by status / group / date.</summary>
     [HttpGet]
-    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
-    public IActionResult Search(
+    [ProducesResponseType(typeof(IReadOnlyList<RequestDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<RequestDetailResponse>>> Search(
         [FromQuery] string? status,
         [FromQuery] string? currentGroupId,
         [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to)
-        => throw new NotImplementedException("GET /api/v1/requests (search/cartable)");
-
-    /// <summary>
-    /// Changes the summary status of a request (used by referral-service outbox).
-    /// Auth: X-Api-Key (preferred) or SSO bearer. Idempotent for the same status.
-    /// </summary>
-    [HttpPut("{id:guid}/status")]
-    [ProducesResponseType(typeof(UpdateRequestStatusResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UpdateRequestStatusResponse>> ChangeStatus(
-        Guid id,
-        [FromBody] UpdateRequestStatusRequest body,
+        [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
-        var authorization = Request.Headers.Authorization.ToString();
-        var apiKey = Request.Headers[_internalAuth.Value.HeaderName].ToString();
-
-        return Ok(await _requestService.UpdateStatusAsync(
-            id,
-            body,
-            string.IsNullOrWhiteSpace(authorization) ? null : authorization,
-            string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-            cancellationToken));
+        var response = await _requestService.SearchAsync(
+            status,
+            currentGroupId,
+            from,
+            to,
+            AuthHeader(),
+            ApiKeyHeader(),
+            cancellationToken);
+        return Ok(response);
     }
 
-    /// <summary>
-    /// Retargets the request to another group (sets CurrentGroupId + Status=Referred).
-    /// Auth: X-Api-Key (preferred) or SSO bearer. Idempotent for the same group.
-    /// </summary>
-    [HttpPut("{id:guid}/refer")]
-    [ProducesResponseType(typeof(ReferRequestResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ReferRequestResponse>> Refer(
-        Guid id,
-        [FromBody] ReferRequestRequest body,
-        CancellationToken cancellationToken)
-    {
-        var authorization = Request.Headers.Authorization.ToString();
-        var apiKey = Request.Headers[_internalAuth.Value.HeaderName].ToString();
+    /// <summary>Changes the status of a request. TODO(next phase): implement.</summary>
+    [HttpPut("{id:guid}/status")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public IActionResult ChangeStatus(Guid id, [FromBody] object body)
+        => throw new NotImplementedException("PUT /api/v1/requests/{id}/status");
 
-        return Ok(await _requestService.ReferAsync(
-            id,
-            body,
-            string.IsNullOrWhiteSpace(authorization) ? null : authorization,
-            string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-            cancellationToken));
+    /// <summary>Refers a request between groups. TODO(next phase): implement.</summary>
+    [HttpPut("{id:guid}/refer")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public IActionResult Refer(Guid id, [FromBody] object body)
+        => throw new NotImplementedException("PUT /api/v1/requests/{id}/refer");
+
+    private string? AuthHeader()
+    {
+        var value = Request.Headers.Authorization.ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private string? ApiKeyHeader()
+    {
+        var value = Request.Headers[_internalAuth.Value.HeaderName].ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

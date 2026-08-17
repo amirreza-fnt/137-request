@@ -55,11 +55,13 @@ public sealed class RequestRepository : IRequestRepository
     public async Task<Request?> GetByIdAsync(Guid id, CancellationToken ct)
         => await _db.Requests
             .Include(r => r.Files)
+            .Include(r => r.Logs)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
     public async Task<Request?> GetByTrackingCodeAsync(string trackingCode, CancellationToken ct)
         => await _db.Requests
             .Include(r => r.Files)
+            .Include(r => r.Logs)
             .FirstOrDefaultAsync(r => r.TrackingCode == trackingCode, ct);
 
     public async Task<Request?> FindByTrackingCodeFlexibleAsync(string codeOrDigits, CancellationToken ct)
@@ -82,25 +84,10 @@ public sealed class RequestRepository : IRequestRepository
             return null;
         }
 
-        // Reconstruct canonical form: 137 + yyyyMMdd(8) + seq(6) → 137-yyyyMMdd-seq
-        if (digits.Length == 17 && digits.StartsWith("137", StringComparison.Ordinal))
-        {
-            var reconstructed = $"137-{digits.Substring(3, 8)}-{digits.Substring(11, 6)}";
-            var byReconstructed = await GetByTrackingCodeAsync(reconstructed, ct);
-            if (byReconstructed is not null)
-            {
-                return byReconstructed;
-            }
-        }
-
-        // Compare digit-only form in SQL (for partial / TTS digit strings)
         return await _db.Requests
             .Include(r => r.Files)
-            .AsNoTracking()
-            .Where(r => r.TrackingCode.Replace("-", "") == digits
-                        || r.TrackingCode.Replace("-", "").EndsWith(digits))
-            .OrderByDescending(r => r.CreatedAtUtc)
-            .FirstOrDefaultAsync(ct);
+            .Include(r => r.Logs)
+            .FirstOrDefaultAsync(r => r.TrackingCode.Replace("-", "") == digits, ct);
     }
 
     public async Task CreateAsync(
@@ -138,7 +125,6 @@ public sealed class RequestRepository : IRequestRepository
         await RunInTransactionAsync(async () =>
         {
             request.CurrentGroupId = toGroupId;
-            request.Status = RequestStatus.Referred;
             request.UpdatedAtUtc = DateTime.UtcNow;
             _db.Requests.Update(request);
             _db.RequestLogs.Add(log);
@@ -182,7 +168,9 @@ public sealed class RequestRepository : IRequestRepository
         DateTime? toUtc,
         CancellationToken ct)
     {
-        var query = _db.Requests.AsNoTracking();
+        IQueryable<Request> query = _db.Requests.AsNoTracking()
+            .Include(r => r.Files)
+            .Include(r => r.Logs);
 
         if (status.HasValue)
         {

@@ -6,7 +6,7 @@ public sealed record UpdateRequestStatusRequest(string Status, string? Reason);
 
 public sealed record ReferRequestRequest(string ToGroupId, string? Reason);
 
-public sealed record RequestFileDto(string FileId, string FileType, DateTime CreatedAtUtc);
+public sealed record RequestFileDto(string FileId, string FileType, DateTime CreatedAtUtc, string? ListenUrl);
 
 public sealed record RequestDetailResponse(
     Guid Id,
@@ -19,6 +19,10 @@ public sealed record RequestDetailResponse(
     string Status,
     string? CurrentGroupId,
     string? CreatedBySourcePhone,
+    string? CitizenFirstName,
+    string? CitizenLastName,
+    string? CitizenPhone,
+    string? Outcome,
     DateTime CreatedAtUtc,
     DateTime? UpdatedAtUtc,
     IReadOnlyList<RequestFileDto> Files);

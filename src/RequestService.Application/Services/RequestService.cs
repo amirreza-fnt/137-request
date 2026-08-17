@@ -22,7 +22,6 @@ public sealed class RequestService : IRequestService
     private readonly IFileServiceClient _fileServiceClient;
     private readonly ITrackingCodeGenerator _trackingCodeGenerator;
     private readonly IRequestRepository _repository;
-    private readonly IReferralBootstrapClient _referralBootstrapClient;
     private readonly IOptions<InternalAuthOptions> _internalAuthOptions;
     private readonly IOptions<FilesOptions> _filesOptions;
     private readonly ILogger<RequestService> _logger;
@@ -33,7 +32,6 @@ public sealed class RequestService : IRequestService
         IFileServiceClient fileServiceClient,
         ITrackingCodeGenerator trackingCodeGenerator,
         IRequestRepository repository,
-        IReferralBootstrapClient referralBootstrapClient,
         IOptions<InternalAuthOptions> internalAuthOptions,
         IOptions<FilesOptions> filesOptions,
         ILogger<RequestService> logger)
@@ -43,7 +41,6 @@ public sealed class RequestService : IRequestService
         _fileServiceClient = fileServiceClient;
         _trackingCodeGenerator = trackingCodeGenerator;
         _repository = repository;
-        _referralBootstrapClient = referralBootstrapClient;
         _internalAuthOptions = internalAuthOptions;
         _filesOptions = filesOptions;
         _logger = logger;
@@ -126,14 +123,6 @@ public sealed class RequestService : IRequestService
             "Request {RequestId} created with tracking code {TrackingCode} via {Channel}",
             requestId, trackingCode, request.Channel);
 
-        // ---------- 8. Best-effort start of referral workflow (must not fail create) ----------
-        await _referralBootstrapClient.TryBootstrapAsync(
-            requestId,
-            entity.Description,
-            entity.LocationLat.HasValue ? (double)entity.LocationLat.Value : null,
-            entity.LocationLng.HasValue ? (double)entity.LocationLng.Value : null,
-            ct);
-
         return new CreateRequestResponse(requestId, trackingCode);
     }
 
@@ -143,136 +132,59 @@ public sealed class RequestService : IRequestService
         string? apiKeyHeader,
         CancellationToken ct)
     {
-        await EnsureAuthenticatedAsync(authorizationHeader, apiKeyHeader, ct);
-
+        await RequireReadAccessAsync(authorizationHeader, apiKeyHeader, ct);
         var entity = await _repository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException($"Request '{id}' was not found.");
-
-        return ToDetail(entity);
+        return MapDetail(entity);
     }
 
-    public async Task<RequestDetailResponse> GetByTrackingCodeAsync(string code, CancellationToken ct)
+    public async Task<RequestDetailResponse> GetByTrackingCodeAsync(
+        string code,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct)
     {
+        await RequireReadAccessAsync(authorizationHeader, apiKeyHeader, ct);
         if (string.IsNullOrWhiteSpace(code))
         {
             throw new DomainValidationException("Tracking code is required.");
         }
 
-        var entity = await _repository.FindByTrackingCodeFlexibleAsync(code.Trim(), ct)
+        var entity = await _repository.FindByTrackingCodeFlexibleAsync(code, ct)
             ?? throw new NotFoundException($"Request with tracking code '{code}' was not found.");
-
-        return ToDetail(entity);
+        return MapDetail(entity);
     }
 
-    public async Task<UpdateRequestStatusResponse> UpdateStatusAsync(
-        Guid id,
-        UpdateRequestStatusRequest request,
+    public async Task<IReadOnlyList<RequestDetailResponse>> SearchAsync(
+        string? status,
+        string? currentGroupId,
+        DateTime? fromUtc,
+        DateTime? toUtc,
         string? authorizationHeader,
         string? apiKeyHeader,
         CancellationToken ct)
     {
-        await EnsureInternalOrBearerAsync(authorizationHeader, apiKeyHeader, ct);
+        await RequireReadAccessAsync(authorizationHeader, apiKeyHeader, ct);
 
-        if (string.IsNullOrWhiteSpace(request.Status)
-            || !Enum.TryParse<RequestStatus>(request.Status.Trim(), ignoreCase: true, out var newStatus))
+        RequestStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status))
         {
-            throw new DomainValidationException(
-                $"Invalid status '{request.Status}'. Allowed: {string.Join(", ", Enum.GetNames<RequestStatus>())}.");
+            if (!Enum.TryParse<RequestStatus>(status, ignoreCase: true, out var value))
+            {
+                throw new DomainValidationException($"Unknown status '{status}'.");
+            }
+
+            parsedStatus = value;
         }
 
-        var entity = await _repository.GetByIdAsync(id, ct)
-            ?? throw new NotFoundException($"Request '{id}' was not found.");
-
-        // Idempotent: same status → success without a duplicate log noise... still OK to log once.
-        if (entity.Status == newStatus)
-        {
-            return new UpdateRequestStatusResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId);
-        }
-
-        var previous = entity.Status;
-        entity.Status = newStatus;
-        entity.UpdatedAtUtc = DateTime.UtcNow;
-
-        var log = new RequestLogItem
-        {
-            Id = Guid.NewGuid(),
-            RequestId = entity.Id,
-            ActionType = MapStatusAction(newStatus),
-            ActorType = ActorType.ExternalService,
-            ActorId = ResolveApiKeyName(apiKeyHeader) ?? "referral-service",
-            PreviousStatus = previous.ToString(),
-            NewStatus = newStatus.ToString(),
-            Description = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
-            CreatedAtUtc = DateTime.UtcNow,
-            Request = entity
-        };
-
-        await _repository.UpdateStatusAsync(entity, log, ct);
-
-        _logger.LogInformation(
-            "Request {RequestId} status changed {From} → {To}",
-            id, previous, newStatus);
-
-        return new UpdateRequestStatusResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId);
+        var rows = await _repository.SearchAsync(parsedStatus, currentGroupId, fromUtc, toUtc, ct);
+        return rows.Select(MapDetail).ToList();
     }
 
-    public async Task<ReferRequestResponse> ReferAsync(
-        Guid id,
-        ReferRequestRequest request,
+    private async Task RequireReadAccessAsync(
         string? authorizationHeader,
         string? apiKeyHeader,
         CancellationToken ct)
-    {
-        await EnsureInternalOrBearerAsync(authorizationHeader, apiKeyHeader, ct);
-
-        if (string.IsNullOrWhiteSpace(request.ToGroupId))
-        {
-            throw new DomainValidationException("toGroupId is required.");
-        }
-
-        var toGroupId = request.ToGroupId.Trim();
-        var entity = await _repository.GetByIdAsync(id, ct)
-            ?? throw new NotFoundException($"Request '{id}' was not found.");
-
-        // Idempotent refer to the same group.
-        if (string.Equals(entity.CurrentGroupId, toGroupId, StringComparison.Ordinal)
-            && entity.Status == RequestStatus.Referred)
-        {
-            return new ReferRequestResponse(entity.Id, entity.Status.ToString(), entity.CurrentGroupId!);
-        }
-
-        var previousGroup = entity.CurrentGroupId;
-        var previousStatus = entity.Status;
-        entity.Status = RequestStatus.Referred;
-        entity.CurrentGroupId = toGroupId;
-        entity.UpdatedAtUtc = DateTime.UtcNow;
-
-        var log = new RequestLogItem
-        {
-            Id = Guid.NewGuid(),
-            RequestId = entity.Id,
-            ActionType = RequestActionType.Referred,
-            ActorType = ActorType.ExternalService,
-            ActorId = ResolveApiKeyName(apiKeyHeader) ?? "referral-service",
-            PreviousStatus = previousStatus.ToString(),
-            NewStatus = RequestStatus.Referred.ToString(),
-            PreviousGroupId = previousGroup,
-            NewGroupId = toGroupId,
-            Description = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
-            CreatedAtUtc = DateTime.UtcNow,
-            Request = entity
-        };
-
-        await _repository.ReferAsync(entity, toGroupId, log, ct);
-
-        _logger.LogInformation(
-            "Request {RequestId} referred to group {GroupId}",
-            id, toGroupId);
-
-        return new ReferRequestResponse(entity.Id, entity.Status.ToString(), toGroupId);
-    }
-
-    private async Task EnsureAuthenticatedAsync(string? authorizationHeader, string? apiKeyHeader, CancellationToken ct)
     {
         if (IsValidApiKey(apiKeyHeader))
         {
@@ -282,53 +194,97 @@ public sealed class RequestService : IRequestService
         var bearer = ExtractBearerToken(authorizationHeader);
         if (string.IsNullOrEmpty(bearer))
         {
-            throw new NotAuthenticatedException("An Authorization: Bearer token or X-Api-Key is required.");
+            throw new NotAuthenticatedException("X-Api-Key or Authorization: Bearer is required.");
         }
 
-        _ = await ValidateSsoTokenAsync(bearer, ct);
+        await ValidateSsoTokenAsync(bearer, ct);
     }
 
-    private async Task EnsureInternalOrBearerAsync(string? authorizationHeader, string? apiKeyHeader, CancellationToken ct)
+    private static RequestDetailResponse MapDetail(Request entity)
     {
-        if (IsValidApiKey(apiKeyHeader))
-        {
-            return;
-        }
+        var listenUrl = ExtractDescriptionField(entity.Description, "listenUrl");
+        var outcome = ExtractDescriptionField(entity.Description, "outcome");
+        var (firstName, lastName, logPhone) = ParseCreatedCitizen(entity);
 
-        var bearer = ExtractBearerToken(authorizationHeader);
-        if (string.IsNullOrEmpty(bearer))
-        {
-            throw new NotAuthenticatedException(
-                "Status/refer endpoints require a valid X-Api-Key (service) or Authorization: Bearer token.");
-        }
+        var files = entity.Files
+            .OrderBy(f => f.CreatedAtUtc)
+            .Select((f, index) => new RequestFileDto(
+                f.FileId,
+                f.FileType.ToString(),
+                f.CreatedAtUtc,
+                index == 0 ? listenUrl : null))
+            .ToList();
 
-        _ = await ValidateSsoTokenAsync(bearer, ct);
-    }
+        var phone = entity.CreatedBySourcePhone ?? logPhone;
 
-    private static RequestActionType MapStatusAction(RequestStatus status) => status switch
-    {
-        RequestStatus.Rejected => RequestActionType.Rejected,
-        RequestStatus.Closed => RequestActionType.Closed,
-        RequestStatus.Canceled => RequestActionType.Canceled,
-        RequestStatus.Referred => RequestActionType.Referred,
-        _ => RequestActionType.StatusChanged
-    };
-
-    private static RequestDetailResponse ToDetail(Request entity)
-        => new(
+        return new RequestDetailResponse(
             entity.Id,
             entity.TrackingCode,
             entity.NationalCode,
             entity.Description,
-            entity.LocationLat.HasValue ? (double)entity.LocationLat.Value : null,
-            entity.LocationLng.HasValue ? (double)entity.LocationLng.Value : null,
+            entity.LocationLat is null ? null : (double)entity.LocationLat,
+            entity.LocationLng is null ? null : (double)entity.LocationLng,
             entity.Channel.ToString(),
             entity.Status.ToString(),
             entity.CurrentGroupId,
             entity.CreatedBySourcePhone,
+            firstName,
+            lastName,
+            phone,
+            outcome,
             entity.CreatedAtUtc,
             entity.UpdatedAtUtc,
-            entity.Files.Select(f => new RequestFileDto(f.FileId, f.FileType.ToString(), f.CreatedAtUtc)).ToList());
+            files);
+    }
+
+    private static (string? FirstName, string? LastName, string? Phone) ParseCreatedCitizen(Request entity)
+    {
+        var log = entity.Logs
+            .Where(l => l.ActionType == RequestActionType.Created)
+            .OrderBy(l => l.CreatedAtUtc)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(log?.Description))
+        {
+            return (null, null, null);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(log.Description);
+            var root = doc.RootElement;
+            static string? Read(JsonElement el, string name)
+                => el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+                    ? v.GetString()
+                    : null;
+
+            return (Read(root, "firstName"), Read(root, "lastName"), Read(root, "phoneNumber"));
+        }
+        catch (JsonException)
+        {
+            return (null, null, null);
+        }
+    }
+
+    private static string? ExtractDescriptionField(string? description, string key)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return null;
+        }
+
+        var prefix = key + "=";
+        foreach (var part in description.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = part[prefix.Length..].Trim();
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+        }
+
+        return null;
+    }
 
     private async Task<CallerContext> ResolveCallerAsync(
         RequestChannel channel,

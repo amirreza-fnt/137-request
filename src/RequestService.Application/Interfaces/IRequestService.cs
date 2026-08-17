@@ -15,21 +15,23 @@ public interface IRequestService
         string? apiKeyHeader,
         CancellationToken ct);
 
-    Task<RequestDetailResponse> GetByIdAsync(Guid id, string? authorizationHeader, string? apiKeyHeader, CancellationToken ct);
-
-    /// <summary>Citizen / IVR lookup by tracking code (full or digit-only from TTS).</summary>
-    Task<RequestDetailResponse> GetByTrackingCodeAsync(string code, CancellationToken ct);
-
-    Task<UpdateRequestStatusResponse> UpdateStatusAsync(
+    Task<RequestDetailResponse> GetByIdAsync(
         Guid id,
-        UpdateRequestStatusRequest request,
         string? authorizationHeader,
         string? apiKeyHeader,
         CancellationToken ct);
 
-    Task<ReferRequestResponse> ReferAsync(
-        Guid id,
-        ReferRequestRequest request,
+    Task<RequestDetailResponse> GetByTrackingCodeAsync(
+        string code,
+        string? authorizationHeader,
+        string? apiKeyHeader,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<RequestDetailResponse>> SearchAsync(
+        string? status,
+        string? currentGroupId,
+        DateTime? fromUtc,
+        DateTime? toUtc,
         string? authorizationHeader,
         string? apiKeyHeader,
         CancellationToken ct);

@@ -82,12 +82,26 @@ try
             In = ParameterLocation.Header,
             Description = "JWT issued by sso-login-service (citizen/operator)."
         });
+        c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+        {
+            Name = "X-Api-Key",
+            Type = SecuritySchemeType.ApiKey,
+            In = ParameterLocation.Header,
+            Description = "Internal key for telephony / demo (e.g. dev-internal-key-137)."
+        });
         c.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
             {
                 new OpenApiSecurityScheme
                 {
                     Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                },
+                Array.Empty<string>()
+            },
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
                 },
                 Array.Empty<string>()
             }
@@ -140,7 +154,11 @@ try
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
 
+    app.UseStaticFiles();
     app.UseRouting();
+
+    app.MapGet("/kartabl", () => Results.Redirect("/kartabl/index.html"));
+    app.MapGet("/demo", () => Results.Redirect("/kartabl/index.html"));
 
     if (app.Environment.IsDevelopment())
     {

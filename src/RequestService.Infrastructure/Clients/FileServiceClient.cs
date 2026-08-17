@@ -32,18 +32,9 @@ public sealed class FileServiceClient : IFileServiceClient
         var path = _options.Value.GetFilePath.Replace("{id}", fileId);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
 
-        // Prefer X-Api-Key (internal). Fall back to Bearer JWT if the token looks like a JWT.
         if (!string.IsNullOrWhiteSpace(_options.Value.ServiceToken))
         {
-            var token = _options.Value.ServiceToken.Trim();
-            if (token.Count(c => c == '.') == 2)
-            {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            }
-            else
-            {
-                request.Headers.TryAddWithoutValidation("X-Api-Key", token);
-            }
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.Value.ServiceToken);
         }
 
         try

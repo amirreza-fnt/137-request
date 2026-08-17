@@ -28,11 +28,6 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.Configure<InternalAuthOptions>(configuration.GetSection(InternalAuthOptions.SectionName));
-        services.AddOptions<ReferralBootstrapOptions>()
-            .Bind(configuration.GetSection(ReferralBootstrapOptions.SectionName))
-            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.BaseUrl),
-                "ReferralBootstrap:BaseUrl is required when ReferralBootstrap:Enabled is true.")
-            .ValidateOnStart();
 
         // ---------- Validation ----------
         services.AddValidatorsFromAssemblyContaining<CreateRequestValidator>();
@@ -83,28 +78,6 @@ public static class DependencyInjection
             opt.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(files.TimeoutSeconds + 2);
             opt.AttemptTimeout.Timeout = TimeSpan.FromSeconds(files.TimeoutSeconds);
             opt.Retry.MaxRetryAttempts = files.RetryCount;
-            opt.Retry.Delay = TimeSpan.FromMilliseconds(300);
-            opt.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
-            opt.CircuitBreaker.MinimumThroughput = 8;
-            opt.CircuitBreaker.FailureRatio = 0.5;
-            opt.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
-        });
-
-        var referral = configuration.GetSection(ReferralBootstrapOptions.SectionName).Get<ReferralBootstrapOptions>()
-                       ?? new ReferralBootstrapOptions();
-        services.AddHttpClient<IReferralBootstrapClient, ReferralBootstrapClient>(client =>
-        {
-            if (!string.IsNullOrWhiteSpace(referral.BaseUrl))
-            {
-                client.BaseAddress = new Uri(EnsureTrailingSlash(referral.BaseUrl));
-            }
-
-            client.Timeout = TimeSpan.FromSeconds(referral.TimeoutSeconds + 5);
-        }).AddStandardResilienceHandler(opt =>
-        {
-            opt.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(referral.TimeoutSeconds + 2);
-            opt.AttemptTimeout.Timeout = TimeSpan.FromSeconds(referral.TimeoutSeconds);
-            opt.Retry.MaxRetryAttempts = referral.RetryCount;
             opt.Retry.Delay = TimeSpan.FromMilliseconds(300);
             opt.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
             opt.CircuitBreaker.MinimumThroughput = 8;
