@@ -28,6 +28,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.Configure<InternalAuthOptions>(configuration.GetSection(InternalAuthOptions.SectionName));
+        services.Configure<TelephonyOptions>(configuration.GetSection(TelephonyOptions.SectionName));
 
         // ---------- Validation ----------
         services.AddValidatorsFromAssemblyContaining<CreateRequestValidator>();
@@ -98,6 +99,28 @@ public static class DependencyInjection
             opt.CircuitBreaker.FailureRatio = 0.5;
             opt.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
         });
+
+        // ---------- IssabelBridge (live queue / answer / hangup) ----------
+        var telephony = configuration.GetSection(TelephonyOptions.SectionName).Get<TelephonyOptions>()
+            ?? new TelephonyOptions();
+        var telephonyBuilder = services.AddHttpClient<ITelephonyBridgeClient, TelephonyBridgeClient>(client =>
+        {
+            if (!string.IsNullOrWhiteSpace(telephony.BridgeBaseUrl))
+            {
+                client.BaseAddress = new Uri(EnsureTrailingSlash(telephony.BridgeBaseUrl));
+            }
+
+            client.Timeout = TimeSpan.FromSeconds(telephony.TimeoutSeconds + 3);
+        });
+
+        if (telephony.AllowInvalidSslCertificate)
+        {
+            telephonyBuilder.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback =
+                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+        }
 
         return services;
     }

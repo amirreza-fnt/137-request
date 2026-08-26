@@ -3,192 +3,439 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>کارتابل درخواست‌های ۱۳۷</title>
+  <title>کارتابل تماس ۱۳۷</title>
   <style>
-    body { font-family: Tahoma, Arial, sans-serif; margin: 16px; line-height: 1.5; }
-    h1 { font-size: 1.25rem; margin: 0 0 12px; }
-    .toolbar { margin-bottom: 12px; }
-    .toolbar label { margin-left: 8px; }
-    input, button { font: inherit; padding: 4px 8px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border: 1px solid #bbb; padding: 8px; vertical-align: top; text-align: right; }
-    th { background: #eee; }
-    tr:nth-child(even) { background: #fafafa; }
-    .muted { color: #666; font-size: 0.9rem; }
-    .err { color: #b00020; margin-top: 8px; }
-    audio { width: 240px; max-width: 100%; display: block; }
-    .empty { padding: 24px; text-align: center; color: #666; }
+    :root {
+      --bg: #f3f5f7;
+      --card: #fff;
+      --line: #d7dde5;
+      --text: #1c2430;
+      --muted: #667085;
+      --accent: #0b6e4f;
+      --danger: #b42318;
+      --warn: #b54708;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #e8eef3 0%, var(--bg) 40%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; }
+    h2 { font-size: 1.05rem; margin: 0 0 10px; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .err { color: var(--danger); margin: 8px 0; white-space: pre-wrap; }
+    .ok { color: var(--accent); }
+    .grid { display: grid; gap: 14px; grid-template-columns: 1.1fr 0.9fr; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 1px 0 rgba(16,24,40,.04);
+    }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    label { font-size: 0.85rem; color: var(--muted); }
+    input, select, button {
+      font: inherit;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    button.secondary { background: #fff; color: var(--text); }
+    button.danger { background: var(--danger); border-color: var(--danger); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.92rem; }
+    th, td { border: 1px solid var(--line); padding: 8px; text-align: right; vertical-align: top; }
+    th { background: #f2f4f7; }
+    tr:nth-child(even) { background: #fafbfc; }
+    audio { width: 220px; max-width: 100%; display: block; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e8f5ef;
+      color: var(--accent);
+      font-size: 0.8rem;
+    }
+    .pill.warn { background: #fff4e5; color: var(--warn); }
+    .pill.bad { background: #fef3f2; color: var(--danger); }
+    .live-item {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+      background: #fbfcfd;
+    }
+    .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .empty { padding: 20px; text-align: center; color: var(--muted); }
+    .sip-status { font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>کارتابل درخواست‌های ۱۳۷</h1>
-  <p class="muted">لیست درخواست‌های ثبت‌شده (تماس تلفنی و سایر کانال‌ها). فایل صوتی در همان ردیف قابل پخش است.</p>
+  <div class="wrap">
+    <h1>کارتابل تماس و درخواست‌های ۱۳۷</h1>
+    <p class="muted">
+      لیست تماس‌های ثبت‌شده از ایزابل + پنل زنده صف ۸۰۰۲.
+      برای مکالمه داخل مرورگر، سافت‌فون پایین صفحه را به اکستنشن کارشناس وصل کنید (بدون MicroSIP جدا).
+    </p>
 
-  <div class="toolbar">
-    <label>کلید دسترسی:</label>
-    <input id="apiKey" type="password" size="28" placeholder="X-Api-Key" />
-    <button type="button" id="btnLoad">بارگذاری مجدد</button>
-    <span id="status" class="muted"></span>
+    <div class="card" style="margin-bottom:14px">
+      <div class="toolbar">
+        <label>X-Api-Key</label>
+        <input id="apiKey" type="password" size="28" placeholder="dev-internal-key-137" />
+        <button type="button" id="btnLoad" class="secondary">بارگذاری درخواست‌ها</button>
+        <label><input type="checkbox" id="autoRefresh" checked /> بروزرسانی خودکار (۵ث)</label>
+        <span id="status" class="muted"></span>
+      </div>
+      <p id="error" class="err"></p>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h2>تماس‌های تلفنی ثبت‌شده</h2>
+        <p class="muted">از <code>GET /api/v1/phone-calls</code> — بعد از قطع تماس و اجرای AGI ایزابل پر می‌شود.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>رهگیری</th>
+              <th>شماره</th>
+              <th>نتیجه</th>
+              <th>اپراتور/زمان</th>
+              <th>صوت</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="6" class="empty">در حال بارگذاری...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>صف زنده / کنترل تماس</h2>
+        <p class="muted">
+          از <code>/api/v1/phone-calls/live</code> و <code>/control</code>.
+          جواب = Redirect به اکستنشن کارشناس (باید سافت‌فون زیر رجیستر باشد).
+        </p>
+        <div class="toolbar">
+          <label>اکستنشن من</label>
+          <input id="agentExt" size="6" value="2001" />
+          <button type="button" id="btnLive" class="secondary">بروزرسانی زنده</button>
+        </div>
+        <div id="liveBox" class="muted">هنوز خوانده نشده.</div>
+        <div id="liveErr" class="err"></div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
+
+        <h2>سافت‌فون داخل کارتابل (JsSIP)</h2>
+        <p class="muted">
+          مرورگر فقط WebSocket/WSS می‌فهمد. اگر روی ایزابل PJSIP WebRTC برای همان اکستنشن ساخته باشید، اینجا رجیستر شوید.
+          در غیر این صورت همین صفحه را باز بگذارید و با هدست/سافت‌فون روی <b>پورت ۵۰۶۶</b> اکستنشن را رجیستر کنید؛ دکمه‌های جواب از پنل زنده کار می‌کنند.
+        </p>
+        <div class="toolbar">
+          <label>WS/WSS</label>
+          <input id="sipWs" size="28" placeholder="wss://192.168.1.70:8089/ws" />
+        </div>
+        <div class="toolbar">
+          <label>SIP URI</label>
+          <input id="sipUri" size="22" placeholder="sip:2001@192.168.1.70" />
+          <label>رمز</label>
+          <input id="sipPass" type="password" size="12" placeholder="pass2001" />
+        </div>
+        <div class="toolbar">
+          <button type="button" id="btnSipConnect">اتصال سافت‌فون</button>
+          <button type="button" id="btnSipHangup" class="danger" disabled>قطع مکالمه</button>
+          <span id="sipStatus" class="sip-status muted">قطع</span>
+        </div>
+        <audio id="remoteAudio" autoplay playsinline></audio>
+      </section>
+    </div>
   </div>
-  <p id="error" class="err"></p>
 
-  <table>
-    <thead>
-      <tr>
-        <th>ردیف</th>
-        <th>کد رهگیری</th>
-        <th>نام</th>
-        <th>شماره تماس</th>
-        <th>کد ملی</th>
-        <th>کانال</th>
-        <th>وضعیت</th>
-        <th>نتیجه تماس</th>
-        <th>زمان ثبت</th>
-        <th>فایل صوتی</th>
-      </tr>
-    </thead>
-    <tbody id="rows">
-      <tr><td colspan="10" class="empty">در حال بارگذاری...</td></tr>
-    </tbody>
-  </table>
-
+  <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.1/dist/jssip.min.js"></script>
   <script>
     const STORAGE_KEY = "137-kartabl-api-key";
+    const STORAGE_EXT = "137-kartabl-agent-ext";
+    const STORAGE_WS = "137-kartabl-sip-ws";
+    const STORAGE_URI = "137-kartabl-sip-uri";
+
     const apiKeyEl = document.getElementById("apiKey");
+    const agentExtEl = document.getElementById("agentExt");
     const rowsEl = document.getElementById("rows");
     const statusEl = document.getElementById("status");
     const errorEl = document.getElementById("error");
+    const liveBox = document.getElementById("liveBox");
+    const liveErr = document.getElementById("liveErr");
+    const autoRefreshEl = document.getElementById("autoRefresh");
+    const sipStatus = document.getElementById("sipStatus");
+    const remoteAudio = document.getElementById("remoteAudio");
 
     const params = new URLSearchParams(location.search);
-    apiKeyEl.value = params.get("key") || localStorage.getItem(STORAGE_KEY) || "";
+    apiKeyEl.value = params.get("key") || localStorage.getItem(STORAGE_KEY) || "dev-internal-key-137";
+    agentExtEl.value = localStorage.getItem(STORAGE_EXT) || "2001";
+    document.getElementById("sipWs").value = localStorage.getItem(STORAGE_WS) || "wss://192.168.1.70:8089/ws";
+    document.getElementById("sipUri").value = localStorage.getItem(STORAGE_URI) || ("sip:" + agentExtEl.value + "@192.168.1.70");
+
+    let ua = null;
+    let currentSession = null;
+    let timer = null;
 
     function saveKey() {
       const key = apiKeyEl.value.trim();
       if (key) localStorage.setItem(STORAGE_KEY, key);
+      localStorage.setItem(STORAGE_EXT, agentExtEl.value.trim() || "2001");
       return key;
     }
 
     function headers() {
       const key = saveKey();
       if (!key) throw new Error("کلید دسترسی (X-Api-Key) را وارد کنید.");
-      return { "X-Api-Key": key, "Accept": "application/json" };
-    }
-
-    function fullName(item) {
-      const parts = [item.citizenFirstName, item.citizenLastName].filter(Boolean);
-      return parts.length ? parts.join(" ") : "—";
-    }
-
-    function channelFa(ch) {
-      const map = {
-        PhoneCall: "تماس تلفنی",
-        CitizenMobileApp: "اپ موبایل",
-        CitizenWebApp: "وب",
-        OperatorApp: "اپ اپراتور",
-        InternalService: "سرویس داخلی"
-      };
-      return map[ch] || ch || "—";
-    }
-
-    function statusFa(st) {
-      const map = {
-        New: "جدید",
-        InReview: "در بررسی",
-        Confirmed: "تأیید شده",
-        Referred: "ارجاع شده",
-        Closed: "بسته",
-        Rejected: "رد شده",
-        Canceled: "لغو"
-      };
-      return map[st] || st || "—";
+      return { "X-Api-Key": key, "Accept": "application/json", "Content-Type": "application/json" };
     }
 
     function outcomeFa(code) {
-      if (!code) return "—";
-      const map = {
-        NO_ANSWER: "بدون پاسخ اپراتور",
-        ANSWERED: "پاسخ داده شد",
-        QUEUE: "صف",
-        VOICEMAIL: "پیام صوتی"
-      };
-      return map[code] || code;
+      const map = { NO_ANSWER: "بدون پاسخ", ANSWERED: "پاسخ‌داده‌شده", QUEUE: "صف", VOICEMAIL: "پیام صوتی" };
+      return map[code] || code || "—";
     }
 
     function formatTime(utc) {
       if (!utc) return "—";
-      try {
-        return new Date(utc).toLocaleString("fa-IR");
-      } catch {
-        return utc;
-      }
+      try { return new Date(utc).toLocaleString("fa-IR"); } catch { return utc; }
     }
 
     function audioCell(item) {
       const file = (item.files || [])[0];
-      if (!file) {
-        return '<span class="muted">فایل صوتی ندارد</span>';
-      }
-
+      if (!file || !file.listenUrl) return '<span class="muted">—</span>';
       const key = saveKey();
       let url = file.listenUrl;
-      if (url && url.startsWith("/api/v1/demo/")) {
+      if (url.startsWith("/api/v1/demo/")) {
         url += (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key);
       }
-      if (!url) {
-        return '<span class="muted">فایل صوتی ندارد</span>';
-      }
-
       return '<audio controls preload="none" src="' + url + '"></audio>'
         + '<a href="' + url + '" target="_blank" rel="noreferrer">دانلود</a>';
     }
 
+    function operatorFromDesc(desc) {
+      if (!desc) return "";
+      const m = /operatorExt=([0-9A-Za-z_-]+)/.exec(desc);
+      return m ? m[1] : "";
+    }
+
     function render(items) {
       if (!items.length) {
-        rowsEl.innerHTML = '<tr><td colspan="10" class="empty">درخواستی ثبت نشده است.</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="6" class="empty">تماس تلفنی ثبت نشده.</td></tr>';
         return;
       }
-
       rowsEl.innerHTML = items.map((item, i) => {
         const phone = item.citizenPhone || item.createdBySourcePhone || "—";
+        const op = operatorFromDesc(item.description);
+        const badge = item.outcome === "ANSWERED"
+          ? '<span class="pill">ANSWERED</span>'
+          : '<span class="pill warn">' + (item.outcome || "—") + "</span>";
         return "<tr>"
           + "<td>" + (i + 1) + "</td>"
           + "<td><b>" + (item.trackingCode || "—") + "</b></td>"
-          + "<td>" + fullName(item) + "</td>"
           + "<td>" + phone + "</td>"
-          + "<td>" + (item.nationalCode || "—") + "</td>"
-          + "<td>" + channelFa(item.channel) + "</td>"
-          + "<td>" + statusFa(item.status) + "</td>"
-          + "<td>" + outcomeFa(item.outcome) + "</td>"
-          + "<td>" + formatTime(item.createdAtUtc) + "</td>"
+          + "<td>" + badge + "<div class='muted'>" + outcomeFa(item.outcome) + "</div></td>"
+          + "<td>" + (op ? ("داخلی " + op + "<br>") : "") + formatTime(item.createdAtUtc) + "</td>"
           + "<td>" + audioCell(item) + "</td>"
           + "</tr>";
       }).join("");
     }
 
-    async function load() {
+    async function loadRequests() {
       errorEl.textContent = "";
-      statusEl.textContent = "در حال خواندن...";
+      statusEl.textContent = "خواندن درخواست‌ها...";
       try {
-        const res = await fetch("/api/v1/requests", { headers: headers() });
+        const res = await fetch("/api/v1/phone-calls", { headers: headers() });
         const text = await res.text();
         let data = null;
         try { data = text ? JSON.parse(text) : []; } catch { data = null; }
-        if (!res.ok) {
-          throw new Error((data && (data.message || data.code)) || ("خطای HTTP " + res.status));
-        }
+        if (!res.ok) throw new Error((data && (data.message || data.error || data.code)) || ("HTTP " + res.status));
         const items = Array.isArray(data) ? data : [];
-        statusEl.textContent = items.length + " مورد — آخرین بروزرسانی: " + new Date().toLocaleTimeString("fa-IR");
+        statusEl.textContent = items.length + " تماس — " + new Date().toLocaleTimeString("fa-IR");
         render(items);
       } catch (e) {
         statusEl.textContent = "";
         errorEl.textContent = e.message || String(e);
-        rowsEl.innerHTML = '<tr><td colspan="10" class="empty">بارگذاری ناموفق بود.</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="6" class="empty">بارگذاری ناموفق.</td></tr>';
       }
     }
 
-    document.getElementById("btnLoad").addEventListener("click", load);
+    async function loadLive() {
+      liveErr.textContent = "";
+      try {
+        const res = await fetch("/api/v1/phone-calls/live", { headers: headers() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || ("HTTP " + res.status));
+
+        if (data.configured === false || data.ok === false && data.message) {
+          liveBox.innerHTML = '<span class="pill bad">بریج تنظیم نشده</span> '
+            + '<span class="muted">' + (data.message || data.error || JSON.stringify(data)) + "</span>";
+          return;
+        }
+
+        const callers = data.callers || [];
+        const members = data.members || [];
+        let html = "<div><b>اعضای صف:</b> ";
+        if (!members.length) html += '<span class="muted">نامشخص</span>';
+        else html += members.map(m => '<span class="pill">' + (m.exten || "?") + " — " + (m.status || "") + "</span> ").join("");
+        html += "</div>";
+
+        if (!callers.length) {
+          html += '<div class="empty">در صف تماسی نیست.</div>';
+        } else {
+          html += callers.map((c, idx) => {
+            const ch = c.channel || "";
+            return '<div class="live-item">'
+              + "<div><b>تماس #" + (idx + 1) + "</b> — <code>" + ch + "</code></div>"
+              + '<div class="muted">' + (c.raw || "") + "</div>"
+              + '<div class="row-actions">'
+              + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب (به داخلی من)</button>'
+              + '<button type="button" class="danger" data-act="reject" data-ch="' + ch.replace(/"/g, "") + '">رد / قطع</button>'
+              + "</div></div>";
+          }).join("");
+        }
+        liveBox.innerHTML = html;
+      } catch (e) {
+        liveErr.textContent = e.message || String(e);
+      }
+    }
+
+    async function control(action, channel) {
+      liveErr.textContent = "";
+      const body = {
+        action,
+        channel,
+        exten: agentExtEl.value.trim() || "2001",
+        context: "from-internal"
+      };
+      const res = await fetch("/api/v1/phone-calls/control", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.message || data.error || ("کنترل ناموفق HTTP " + res.status));
+      }
+      await loadLive();
+    }
+
+    liveBox.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button[data-act]");
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await control(btn.getAttribute("data-act"), btn.getAttribute("data-ch"));
+      } catch (e) {
+        liveErr.textContent = e.message || String(e);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    function setSipStatus(text, ok) {
+      sipStatus.textContent = text;
+      sipStatus.className = "sip-status " + (ok ? "ok" : "muted");
+    }
+
+    function connectSip() {
+      if (typeof JsSIP === "undefined") {
+        setSipStatus("کتابخانه JsSIP لود نشد", false);
+        return;
+      }
+      const ws = document.getElementById("sipWs").value.trim();
+      const uri = document.getElementById("sipUri").value.trim();
+      const pass = document.getElementById("sipPass").value;
+      localStorage.setItem(STORAGE_WS, ws);
+      localStorage.setItem(STORAGE_URI, uri);
+      if (!ws || !uri || !pass) {
+        setSipStatus("WS و URI و رمز لازم است", false);
+        return;
+      }
+
+      try {
+        if (ua) { try { ua.stop(); } catch (_) {} }
+        const socket = new JsSIP.WebSocketInterface(ws);
+        const conf = {
+          sockets: [socket],
+          uri,
+          password: pass,
+          session_timers: false,
+          register: true
+        };
+        ua = new JsSIP.UA(conf);
+        ua.on("connected", () => setSipStatus("WS وصل", true));
+        ua.on("disconnected", () => setSipStatus("WS قطع", false));
+        ua.on("registered", () => setSipStatus("Registered", true));
+        ua.on("unregistered", () => setSipStatus("Unregistered", false));
+        ua.on("registrationFailed", (e) => setSipStatus("رجیستر نشد: " + (e.cause || ""), false));
+        ua.on("newRTCSession", (data) => {
+          const session = data.session;
+          currentSession = session;
+          document.getElementById("btnSipHangup").disabled = false;
+          if (data.originator === "remote") {
+            setSipStatus("تماس ورودی — در حال جواب...", true);
+            session.answer({ mediaConstraints: { audio: true, video: false } });
+          }
+          session.on("peerconnection", () => {
+            session.connection.addEventListener("track", (ev) => {
+              remoteAudio.srcObject = ev.streams[0];
+            });
+          });
+          session.on("ended", () => {
+            currentSession = null;
+            document.getElementById("btnSipHangup").disabled = true;
+            setSipStatus("مکالمه تمام شد", true);
+            loadRequests();
+          });
+          session.on("failed", () => {
+            currentSession = null;
+            document.getElementById("btnSipHangup").disabled = true;
+            setSipStatus("تماس ناموفق", false);
+          });
+        });
+        ua.start();
+        setSipStatus("در حال اتصال...", true);
+      } catch (e) {
+        setSipStatus(e.message || String(e), false);
+      }
+    }
+
+    document.getElementById("btnSipHangup").addEventListener("click", () => {
+      if (currentSession) {
+        try { currentSession.terminate(); } catch (_) {}
+      }
+    });
+
+    function tick() {
+      if (!autoRefreshEl.checked) return;
+      loadRequests();
+      loadLive();
+    }
+
+    document.getElementById("btnLoad").addEventListener("click", loadRequests);
+    document.getElementById("btnLive").addEventListener("click", loadLive);
+    document.getElementById("btnSipConnect").addEventListener("click", connectSip);
     apiKeyEl.addEventListener("change", saveKey);
-    load();
+    agentExtEl.addEventListener("change", saveKey);
+
+    loadRequests();
+    loadLive();
+    timer = setInterval(tick, 5000);
   </script>
 </body>
 </html>
