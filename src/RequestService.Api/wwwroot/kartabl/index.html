@@ -101,8 +101,8 @@
 
     async function loadHistory() {
       const res = await fetch("/api/v1/phone-calls", { headers: headers() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || ("HTTP " + res.status));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || ("سابقه تماس: HTTP " + res.status));
       const items = Array.isArray(data) ? data : [];
       if (!items.length) {
         el("rows").innerHTML = '<tr><td colspan="6" class="empty">تماسی ثبت نشده</td></tr>';
@@ -128,8 +128,18 @@
 
     async function loadLive() {
       const res = await fetch("/api/v1/phone-calls/live", { headers: headers() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || ("HTTP " + res.status));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || ("صف زنده: HTTP " + res.status));
+      if (data.ok === false || data.configured === false) {
+        el("meStatus").textContent = "پل ایزابل وصل نیست";
+        el("meStatus").className = "pill bad";
+        el("queueStatus").textContent = "صف ۸۰۰۲: قطع ارتباط";
+        el("queueStatus").className = "pill bad";
+        el("agentsSummary").textContent = data.message || "Telephony/Bridge را روی سرور .12 چک کنید";
+        el("agentsBox").innerHTML = "";
+        el("callsBox").innerHTML = '<div class="empty">اتصال به ایزابل برقرار نیست</div>';
+        throw new Error(data.message || "اتصال به IssabelBridge برقرار نیست");
+      }
 
       const members = data.members || [];
       const callers = data.callers || [];
@@ -213,11 +223,10 @@
 
     async function refreshAll() {
       el("error").textContent = "";
-      try {
-        await Promise.all([loadLive(), loadHistory()]);
-      } catch (e) {
-        el("error").textContent = e.message || String(e);
-      }
+      const errs = [];
+      try { await loadLive(); } catch (e) { errs.push(e.message || String(e)); }
+      try { await loadHistory(); } catch (e) { errs.push(e.message || String(e)); }
+      if (errs.length) el("error").textContent = errs.join("\n");
     }
 
     el("btnRefresh").addEventListener("click", refreshAll);

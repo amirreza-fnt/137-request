@@ -28,9 +28,26 @@ public sealed class TelephonyBridgeClient : ITelephonyBridgeClient
         EnsureConfigured();
         var q = string.IsNullOrWhiteSpace(queue) ? _options.DefaultQueue : queue.Trim();
         var url = $"api/active-calls.php?queue={Uri.EscapeDataString(q)}&secret={Uri.EscapeDataString(_options.BridgeSecret)}";
-        using var res = await _http.GetAsync(url, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        return ParseOrWrap(res, body);
+        try
+        {
+            using var res = await _http.GetAsync(url, ct);
+            var body = await res.Content.ReadAsStringAsync(ct);
+            return ParseOrWrap(res, body);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            return new
+            {
+                ok = false,
+                configured = true,
+                message = "Cannot reach IssabelBridge: " + ex.Message,
+                callers = Array.Empty<object>(),
+                members = Array.Empty<object>(),
+                peers = Array.Empty<object>(),
+                membersOnline = 0,
+                waiting = 0
+            };
+        }
     }
 
     public async Task<object> ControlAsync(
@@ -50,15 +67,26 @@ public sealed class TelephonyBridgeClient : ITelephonyBridgeClient
             ["context"] = string.IsNullOrWhiteSpace(context) ? _options.DefaultContext : context
         };
 
-        using var content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
-        using var req = new HttpRequestMessage(HttpMethod.Post, "api/call-control.php") { Content = content };
-        req.Headers.TryAddWithoutValidation("X-Bridge-Secret", _options.BridgeSecret);
-        using var res = await _http.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        return ParseOrWrap(res, body);
+        try
+        {
+            using var content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "api/call-control.php") { Content = content };
+            req.Headers.TryAddWithoutValidation("X-Bridge-Secret", _options.BridgeSecret);
+            using var res = await _http.SendAsync(req, ct);
+            var body = await res.Content.ReadAsStringAsync(ct);
+            return ParseOrWrap(res, body);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            return new
+            {
+                ok = false,
+                message = "Cannot reach IssabelBridge: " + ex.Message
+            };
+        }
     }
 
     private void EnsureConfigured()
