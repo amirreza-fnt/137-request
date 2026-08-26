@@ -110,7 +110,9 @@ public static class DependencyInjection
                 client.BaseAddress = new Uri(EnsureTrailingSlash(telephony.BridgeBaseUrl));
             }
 
-            client.Timeout = TimeSpan.FromSeconds(telephony.TimeoutSeconds + 3);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(5, telephony.TimeoutSeconds));
+            client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
+            client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower;
         });
 
         if (telephony.AllowInvalidSslCertificate)
