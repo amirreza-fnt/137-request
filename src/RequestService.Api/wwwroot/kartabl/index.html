@@ -139,10 +139,11 @@
 
         <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
 
-        <h2>سافت‌فون داخل کارتابل (JsSIP)</h2>
+        <h2>سافت‌فون کارشناس</h2>
         <p class="muted">
-          مرورگر فقط WebSocket/WSS می‌فهمد. اگر روی ایزابل PJSIP WebRTC برای همان اکستنشن ساخته باشید، اینجا رجیستر شوید.
-          در غیر این صورت همین صفحه را باز بگذارید و با هدست/سافت‌فون روی <b>پورت ۵۰۶۶</b> اکستنشن را رجیستر کنید؛ دکمه‌های جواب از پنل زنده کار می‌کنند.
+          اکستنشن‌های فعلی ایزابل روی <b>SIP پورت ۵۰۶۶</b> هستند. برای مکالمه الان کافی است همان اکستنشن را با MicroSIP/Zoiper رجیستر کنید
+          (Server: <code>192.168.1.70:5066</code>). دکمه‌های «جواب/رد» در پنل زنده، تماس را به داخلی شما Redirect می‌کنند.
+          JsSIP داخل مرورگر فقط اگر WebSocket/WSS و PJSIP WebRTC روی ایزابل فعال باشد کار می‌کند.
         </p>
         <div class="toolbar">
           <label>WS/WSS</label>
@@ -155,16 +156,36 @@
           <input id="sipPass" type="password" size="12" placeholder="pass2001" />
         </div>
         <div class="toolbar">
-          <button type="button" id="btnSipConnect">اتصال سافت‌فون</button>
+          <button type="button" id="btnSipConnect">اتصال JsSIP (اختیاری)</button>
           <button type="button" id="btnSipHangup" class="danger" disabled>قطع مکالمه</button>
-          <span id="sipStatus" class="sip-status muted">قطع</span>
+          <span id="sipStatus" class="sip-status muted">اختیاری — اگر CDN بسته باشد از سافت‌فون ۵۰۶۶ استفاده کنید</span>
         </div>
         <audio id="remoteAudio" autoplay playsinline></audio>
       </section>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.1/dist/jssip.min.js"></script>
+  <script src="vendor/jssip.min.js"></script>
+  <script>
+    (function loadJsSipFallback() {
+      if (typeof JsSIP !== "undefined") return;
+      var urls = [
+        "https://cdnjs.cloudflare.com/ajax/libs/jssip/3.10.0/jssip.min.js",
+        "https://unpkg.com/jssip@3.10.1/dist/jssip.min.js",
+        "https://cdn.jsdelivr.net/npm/jssip@3.10.1/dist/jssip.min.js"
+      ];
+      var i = 0;
+      function next() {
+        if (typeof JsSIP !== "undefined" || i >= urls.length) return;
+        var s = document.createElement("script");
+        s.src = urls[i++];
+        s.onload = function () {};
+        s.onerror = next;
+        document.head.appendChild(s);
+      }
+      next();
+    })();
+  </script>
   <script>
     const STORAGE_KEY = "137-kartabl-api-key";
     const STORAGE_EXT = "137-kartabl-agent-ext";
@@ -354,7 +375,7 @@
 
     function connectSip() {
       if (typeof JsSIP === "undefined") {
-        setSipStatus("کتابخانه JsSIP لود نشد", false);
+        setSipStatus("JsSIP نیست — از سافت‌فون روی پورت ۵۰۶۶ استفاده کنید", false);
         return;
       }
       const ws = document.getElementById("sipWs").value.trim();
