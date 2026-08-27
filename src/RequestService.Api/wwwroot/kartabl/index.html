@@ -112,6 +112,7 @@
     let ua = null;
     let currentSession = null;
     let lastAnswerChannel = "";
+    let callersCache = [];
     let webrtcReady = false;
     let autoAnswer = true;
     let webrtcDetail = "";
@@ -396,17 +397,18 @@
       }
 
       const target = answerExten();
+      callersCache = callers.slice();
       if (!callers.length) {
         el("callsBox").innerHTML = '<div class="empty">تماس منتظری در صف نیست</div>';
       } else {
         el("callsBox").innerHTML = callers.map((c, idx) => {
-          const ch = c.channel || "";
+          const ch = c.channel || c.Channel || "";
           return '<div class="call-card">'
             + "<div><b>تماس ورودی #" + (idx + 1) + "</b></div>"
-            + "<div class='muted'><code>" + ch + "</code></div>"
+            + "<div class='muted'><code>" + String(ch).replace(/</g, "&lt;") + "</code></div>"
             + '<div class="actions">'
-            + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب (' + target + ')</button>'
-            + '<button type="button" class="danger" data-act="reject" data-ch="' + ch.replace(/"/g, "") + '">قطع / رد</button>'
+            + '<button type="button" data-act="answer" data-idx="' + idx + '">جواب (' + target + ')</button>'
+            + '<button type="button" class="danger" data-act="reject" data-idx="' + idx + '">قطع / رد</button>'
             + "</div>"
             + '<div class="muted" style="margin-top:6px;font-size:.8rem">'
             + (webrtcReady
@@ -426,12 +428,16 @@
 
     async function control(action, channel) {
       autoAnswer = true;
-      if (action === "answer") lastAnswerChannel = channel || "";
+      const ch = (channel || "").trim();
+      if (!ch) {
+        throw new Error("channel خالی است — کانال تماس در صف پیدا نشد. یک‌بار Refresh کنید.");
+      }
+      if (action === "answer") lastAnswerChannel = ch;
       const exten = action === "answer" ? answerExten() : agentExt;
       const res = await fetch("/api/v1/phone-calls/control", {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ action: action, channel: channel, exten: exten, context: "from-internal" })
+        body: JSON.stringify({ action: action, channel: ch, exten: exten, context: "from-internal" })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) throw new Error(data.message || data.error || ("کنترل ناموفق " + res.status));
@@ -443,7 +449,12 @@
       if (!btn) return;
       btn.disabled = true;
       el("error").textContent = "";
-      try { await control(btn.getAttribute("data-act"), btn.getAttribute("data-ch")); }
+      try {
+        const idx = parseInt(btn.getAttribute("data-idx") || "-1", 10);
+        const row = (idx >= 0 && callersCache[idx]) ? callersCache[idx] : null;
+        const ch = row ? (row.channel || row.Channel || "") : "";
+        await control(btn.getAttribute("data-act"), ch);
+      }
       catch (e) { el("error").textContent = e.message || String(e); }
       finally { btn.disabled = false; }
     });
