@@ -8,13 +8,13 @@
     :root { --bg:#eef2f6; --card:#fff; --line:#d0d7e2; --text:#182230; --muted:#667085; --ok:#0b6e4f; --bad:#b42318; --warn:#b54708; --ring:#175cd3; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: Tahoma,"Segoe UI",Arial,sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 1100px; margin:0 auto; padding:16px; }
+    .wrap { max-width: 1280px; margin:0 auto; padding:16px; }
     h1 { margin:0 0 4px; font-size:1.3rem; }
     .muted { color:var(--muted); font-size:.9rem; }
     .err { color:var(--bad); white-space:pre-wrap; }
-    .grid { display:grid; gap:12px; grid-template-columns: 340px 1fr; }
-    @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+    .grid { display:grid; gap:12px; grid-template-columns: 320px minmax(0, 1fr); }
+    @media (max-width:980px){ .grid{ grid-template-columns:1fr; } }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; }
     .status-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0 14px; }
     .pill { display:inline-block; padding:4px 10px; border-radius:999px; font-size:.82rem; background:#e8f5ef; color:var(--ok); }
     .pill.bad { background:#fef3f2; color:var(--bad); }
@@ -26,21 +26,29 @@
     button.danger { background:var(--bad); border-color:var(--bad); }
     button:disabled { opacity:.5; cursor:not-allowed; }
     .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-    table { width:100%; border-collapse:collapse; font-size:.9rem; }
-    th,td { border:1px solid var(--line); padding:8px; text-align:right; vertical-align:top; }
-    th { background:#f5f7fa; }
-    audio { width:100%; max-width:280px; display:block; margin-top:8px; }
+    .table-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table.history { width:100%; min-width:760px; border-collapse:collapse; font-size:.9rem; table-layout:fixed; }
+    table.history th, table.history td { border:1px solid var(--line); padding:8px; text-align:right; vertical-align:middle; }
+    table.history th { background:#f5f7fa; }
+    table.history .col-n { width:44px; }
+    table.history .col-track { width:160px; }
+    table.history .col-phone { width:120px; }
+    table.history .col-out { width:110px; }
+    table.history .col-time { width:140px; }
+    table.history .col-audio { width:auto; min-width:220px; }
+    table.history audio { width:100%; min-width:200px; max-width:100%; display:block; height:36px; }
     .call-card { border:2px solid var(--ring); background:#f5faff; border-radius:12px; padding:12px; margin-top:10px; }
     .empty { text-align:center; color:var(--muted); padding:18px; }
     .agent-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); }
     .phone-panel { border:1px dashed var(--line); border-radius:10px; padding:10px; margin-top:10px; background:#fafbfc; }
+    #remoteAudio { width:100%; max-width:100%; display:block; margin-top:8px; }
   </style>
   <script src="vendor/jssip.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <h1>کنسول تماس ۱۳۷</h1>
-    <p class="muted">جواب و مکالمه داخل همین صفحه (WebRTC). صفحه را حتماً با <b>HTTPS</b> باز کنید و اجازه میکروفون بدهید. ضبط/ثبت تماس مثل قبل خودکار است.</p>
+    <p class="muted">جواب و مکالمه ترجیحاً داخل همین صفحه (WebRTC داخلی <b>2101</b>). صفحه را با <b>HTTPS</b> باز کنید. اگر WebRTC آماده نباشد، موقتاً به MicroSIP <b>2001</b> وصل می‌شود.</p>
 
     <div class="status-bar">
       <span id="webrtcStatus" class="pill warn">WebRTC: در حال اتصال...</span>
@@ -59,8 +67,8 @@
         <div id="agentsBox" style="margin-top:10px"></div>
         <div id="callsBox"></div>
         <div class="phone-panel">
-          <div class="muted">صوت تماس جاری</div>
-          <audio id="remoteAudio" autoplay playsinline></audio>
+          <div class="muted">صوت تماس جاری (مرورگر)</div>
+          <audio id="remoteAudio" autoplay playsinline controls></audio>
         </div>
         <audio id="ringTone" preload="auto" loop>
           <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav" />
@@ -69,18 +77,28 @@
 
       <section class="card">
         <h2 style="margin:0 0 8px;font-size:1.05rem">سابقه تماس‌ها</h2>
-        <table>
-          <thead>
-            <tr><th>#</th><th>رهگیری</th><th>شماره</th><th>نتیجه</th><th>زمان</th><th>صوت</th></tr>
-          </thead>
-          <tbody id="rows"><tr><td colspan="6" class="empty">در حال بارگذاری...</td></tr></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="history">
+            <thead>
+              <tr>
+                <th class="col-n">#</th>
+                <th class="col-track">رهگیری</th>
+                <th class="col-phone">شماره</th>
+                <th class="col-out">نتیجه</th>
+                <th class="col-time">زمان</th>
+                <th class="col-audio">صوت</th>
+              </tr>
+            </thead>
+            <tbody id="rows"><tr><td colspan="6" class="empty">در حال بارگذاری...</td></tr></tbody>
+          </table>
+        </div>
       </section>
     </div>
   </div>
 
   <script>
     const API_KEY = "dev-internal-key-137";
+    const FALLBACK_SIP_EXT = "2001";
     const headers = () => ({
       "X-Api-Key": API_KEY,
       "Accept": "application/json",
@@ -95,6 +113,7 @@
     let currentSession = null;
     let webrtcReady = false;
     let autoAnswer = true;
+    let webrtcDetail = "";
 
     function outcomeFa(code) {
       return ({ ANSWERED: "پاسخ داده شد", NO_ANSWER: "بدون پاسخ" })[code] || code || "—";
@@ -107,7 +126,10 @@
       if (!file || !file.listenUrl) return '<span class="muted">—</span>';
       let url = file.listenUrl;
       if (url.startsWith("/api/v1/demo/")) url += (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(API_KEY);
-      return '<audio controls preload="none" src="' + url + '"></audio>';
+      return '<audio controls preload="metadata" controlsList="nodownload" src="' + url + '"></audio>';
+    }
+    function answerExten() {
+      return webrtcReady ? agentExt : FALLBACK_SIP_EXT;
     }
 
     function setWebRtcStatus(text, cls) {
@@ -117,15 +139,18 @@
 
     function attachRemote(session) {
       const audio = el("remoteAudio");
-      session.connection.addEventListener("addstream", function (e) {
-        audio.srcObject = e.stream;
+      const bindStream = function (stream) {
+        audio.srcObject = stream;
         audio.play().catch(function () {});
-      });
-      session.connection.addEventListener("track", function (e) {
-        if (!audio.srcObject) audio.srcObject = new MediaStream();
-        audio.srcObject.addTrack(e.track);
-        audio.play().catch(function () {});
-      });
+      };
+      if (session.connection) {
+        session.connection.addEventListener("addstream", function (e) { bindStream(e.stream); });
+        session.connection.addEventListener("track", function (e) {
+          if (!audio.srcObject) audio.srcObject = new MediaStream();
+          audio.srcObject.addTrack(e.track);
+          audio.play().catch(function () {});
+        });
+      }
     }
 
     function bindSession(session) {
@@ -137,7 +162,7 @@
         currentSession = null;
         el("btnHangupCall").disabled = true;
         el("remoteAudio").srcObject = null;
-        setWebRtcStatus(webrtcReady ? "WebRTC: آماده" : "WebRTC: قطع", webrtcReady ? "" : "bad");
+        setWebRtcStatus(webrtcReady ? "WebRTC: آماده" : "WebRTC: قطع — فعلاً از MicroSIP 2001 استفاده می‌شود", webrtcReady ? "" : "warn");
       });
       session.on("failed", function () {
         currentSession = null;
@@ -150,11 +175,13 @@
     async function initWebRtc() {
       if (typeof JsSIP === "undefined") {
         setWebRtcStatus("WebRTC: کتابخانه JsSIP لود نشد", "bad");
+        webrtcDetail = "vendor/jssip.min.js";
         return;
       }
       if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
         setWebRtcStatus("WebRTC: صفحه را با HTTPS باز کنید", "bad");
-        el("error").textContent = "میکروفون مرورگر فقط روی HTTPS کار می‌کند (مثلاً دامنه nginx کارتابل).";
+        webrtcDetail = "secure-context";
+        el("error").textContent = "میکروفون مرورگر فقط روی HTTPS کار می‌کند. موقتاً جواب از MicroSIP داخلی 2001 انجام می‌شود.";
         return;
       }
 
@@ -165,12 +192,14 @@
       agentExt = cfg.agentExten || "2101";
 
       if (!cfg.webrtc || !cfg.webrtc.enabled) {
-        setWebRtcStatus("WebRTC: در Telephony تنظیم نشده", "bad");
-        el("error").textContent = "WssUrl / SipUsername / SipPassword را در appsettings ست کنید.";
+        setWebRtcStatus("WebRTC: در سرور تنظیم نشده — جواب با 2001", "warn");
+        webrtcDetail = "config-disabled";
+        el("error").textContent = "Telephony:WssUrl/SipPassword روی .12 خالی است. تا نصب 2101، دکمه جواب به MicroSIP 2001 می‌رود.";
         return;
       }
 
       const w = cfg.webrtc;
+      setWebRtcStatus("WebRTC: در حال ثبت‌نام...", "warn");
       const socket = new JsSIP.WebSocketInterface(w.wssUrl);
       const stun = (w.stunServers && w.stunServers.length) ? w.stunServers : ["stun:stun.l.google.com:19302"];
       const configuration = {
@@ -185,18 +214,33 @@
       };
 
       ua = new JsSIP.UA(configuration);
+      ua.on("connected", function () {
+        setWebRtcStatus("WebRTC: سوکت وصل — منتظر ثبت‌نام...", "warn");
+      });
+      ua.on("disconnected", function () {
+        webrtcReady = false;
+        setWebRtcStatus("WebRTC: قطع از WSS — جواب با 2001", "warn");
+        webrtcDetail = "wss-disconnected " + (w.wssUrl || "");
+      });
       ua.on("registered", function () {
         webrtcReady = true;
+        webrtcDetail = "";
         setWebRtcStatus("WebRTC: آماده (" + (w.sipUsername || agentExt) + ")", "");
+        el("error").textContent = "";
       });
       ua.on("unregistered", function () {
         webrtcReady = false;
-        setWebRtcStatus("WebRTC: خارج از ثبت", "warn");
+        setWebRtcStatus("WebRTC: خارج از ثبت — جواب با 2001", "warn");
       });
       ua.on("registrationFailed", function (e) {
         webrtcReady = false;
-        setWebRtcStatus("WebRTC: رجیستر ناموفق", "bad");
-        el("error").textContent = "رجیستر WebRTC ناموفق: " + (e && e.cause ? e.cause : "unknown");
+        const cause = e && e.cause ? String(e.cause) : "unknown";
+        setWebRtcStatus("WebRTC: رجیستر ناموفق — جواب با 2001", "warn");
+        webrtcDetail = cause;
+        el("error").textContent = "رجیستر 2101 ناموفق (" + cause + "). روی ایزابل داخلی PJSIP/WSS را نصب کنید:\n"
+          + "asterisk -rx \"pjsip show endpoint 2101\"\n"
+          + "asterisk -rx \"pjsip show transports\"\n"
+          + "WSS: " + (w.wssUrl || "");
       });
       ua.on("newRTCSession", function (data) {
         const session = data.session;
@@ -225,12 +269,12 @@
         const phone = item.citizenPhone || item.createdBySourcePhone || "—";
         const badge = item.outcome === "ANSWERED" ? "pill" : "pill warn";
         return "<tr>"
-          + "<td>" + (i + 1) + "</td>"
-          + "<td><b>" + (item.trackingCode || "—") + "</b></td>"
-          + "<td>" + phone + "</td>"
-          + "<td><span class='" + badge + "'>" + outcomeFa(item.outcome) + "</span></td>"
-          + "<td>" + formatTime(item.createdAtUtc) + "</td>"
-          + "<td>" + audioCell(item) + "</td>"
+          + "<td class='col-n'>" + (i + 1) + "</td>"
+          + "<td class='col-track'><b>" + (item.trackingCode || "—") + "</b></td>"
+          + "<td class='col-phone'>" + phone + "</td>"
+          + "<td class='col-out'><span class='" + badge + "'>" + outcomeFa(item.outcome) + "</span></td>"
+          + "<td class='col-time'>" + formatTime(item.createdAtUtc) + "</td>"
+          + "<td class='col-audio'>" + audioCell(item) + "</td>"
           + "</tr>";
       }).join("");
     }
@@ -262,7 +306,7 @@
       el("queueStatus").className = waiting > 0 ? "pill ring" : "pill";
 
       if (!members.length) {
-        el("agentsBox").innerHTML = '<div class="muted">اعضای صف از AMI خوانده شد (صدا از WebRTC داخلی ' + agentExt + ').</div>';
+        el("agentsBox").innerHTML = '<div class="muted">صدا: ' + (webrtcReady ? ("WebRTC " + agentExt) : ("MicroSIP " + FALLBACK_SIP_EXT)) + "</div>";
       } else {
         el("agentsBox").innerHTML = members.map(m => {
           const cls = m.online ? "pill" : "pill bad";
@@ -270,6 +314,7 @@
         }).join("");
       }
 
+      const target = answerExten();
       if (!callers.length) {
         el("callsBox").innerHTML = '<div class="empty">تماس منتظری در صف نیست</div>';
       } else {
@@ -279,9 +324,14 @@
             + "<div><b>تماس ورودی #" + (idx + 1) + "</b></div>"
             + "<div class='muted'><code>" + ch + "</code></div>"
             + '<div class="actions">'
-            + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب در کارتابل</button>'
+            + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب (' + target + ')</button>'
             + '<button type="button" class="danger" data-act="reject" data-ch="' + ch.replace(/"/g, "") + '">قطع / رد</button>'
-            + '</div><div class="muted" style="margin-top:6px;font-size:.8rem">صدا داخل مرورگر (داخلی ' + agentExt + ') پخش می‌شود.</div></div>';
+            + "</div>"
+            + '<div class="muted" style="margin-top:6px;font-size:.8rem">'
+            + (webrtcReady
+              ? "صدا داخل مرورگر پخش می‌شود."
+              : "WebRTC آماده نیست — به MicroSIP " + FALLBACK_SIP_EXT + " زنگ می‌خورد.")
+            + "</div></div>";
         }).join("");
       }
 
@@ -294,14 +344,12 @@
     }
 
     async function control(action, channel) {
-      if (action === "answer" && !webrtcReady) {
-        throw new Error("اول WebRTC باید آماده (ثبت‌نام) شود.");
-      }
       autoAnswer = true;
+      const exten = action === "answer" ? answerExten() : agentExt;
       const res = await fetch("/api/v1/phone-calls/control", {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ action: action, channel: channel, exten: agentExt, context: "from-internal" })
+        body: JSON.stringify({ action: action, channel: channel, exten: exten, context: "from-internal" })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) throw new Error(data.message || data.error || ("کنترل ناموفق " + res.status));
@@ -319,17 +367,14 @@
     });
 
     el("btnHangupCall").addEventListener("click", function () {
-      try {
-        if (currentSession) currentSession.terminate();
-      } catch (_) {}
+      try { if (currentSession) currentSession.terminate(); } catch (_) {}
     });
 
     async function refreshAll() {
-      el("error").textContent = "";
       const errs = [];
       try { await loadLive(); } catch (e) { errs.push(e.message || String(e)); }
       try { await loadHistory(); } catch (e) { errs.push(e.message || String(e)); }
-      if (errs.length) el("error").textContent = errs.join("\n");
+      if (errs.length && !el("error").textContent) el("error").textContent = errs.join("\n");
     }
 
     el("btnRefresh").addEventListener("click", refreshAll);
@@ -337,7 +382,7 @@
     (async function boot() {
       try { await initWebRtc(); }
       catch (e) {
-        setWebRtcStatus("WebRTC: خطا", "bad");
+        setWebRtcStatus("WebRTC: خطا — جواب با 2001", "warn");
         el("error").textContent = e.message || String(e);
       }
       refreshAll();
