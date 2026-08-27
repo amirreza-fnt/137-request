@@ -109,19 +109,36 @@ public sealed class PhoneCallsController : ControllerBase
         return Ok(payload);
     }
 
-    /// <summary>Defaults for kartabl softphone / agent panel.</summary>
+    /// <summary>Defaults for kartabl softphone / agent panel (incl. WebRTC).</summary>
     [HttpGet("config")]
     public IActionResult Config()
     {
         RequireApiKey();
         var t = _telephony.Value;
+        var stun = (t.StunServers ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return Ok(new
         {
             queue = t.DefaultQueue,
-            agentExten = t.DefaultAgentExten,
+            agentExten = string.IsNullOrWhiteSpace(t.DefaultAgentExten) ? "2101" : t.DefaultAgentExten,
             context = t.DefaultContext,
             bridgeConfigured = !string.IsNullOrWhiteSpace(t.BridgeBaseUrl)
-                && !string.IsNullOrWhiteSpace(t.BridgeSecret)
+                && !string.IsNullOrWhiteSpace(t.BridgeSecret),
+            webrtc = new
+            {
+                enabled = !string.IsNullOrWhiteSpace(t.WssUrl)
+                    && !string.IsNullOrWhiteSpace(t.SipDomain)
+                    && !string.IsNullOrWhiteSpace(t.SipUsername)
+                    && !string.IsNullOrWhiteSpace(t.SipPassword),
+                wssUrl = t.WssUrl,
+                sipDomain = t.SipDomain,
+                sipUsername = t.SipUsername,
+                sipPassword = t.SipPassword,
+                sipUri = string.IsNullOrWhiteSpace(t.SipUsername) || string.IsNullOrWhiteSpace(t.SipDomain)
+                    ? ""
+                    : $"sip:{t.SipUsername}@{t.SipDomain}",
+                stunServers = stun
+            }
         });
     }
 

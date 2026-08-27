@@ -29,22 +29,25 @@
     table { width:100%; border-collapse:collapse; font-size:.9rem; }
     th,td { border:1px solid var(--line); padding:8px; text-align:right; vertical-align:top; }
     th { background:#f5f7fa; }
-    audio { width:200px; max-width:100%; display:block; }
+    audio { width:100%; max-width:280px; display:block; margin-top:8px; }
     .call-card { border:2px solid var(--ring); background:#f5faff; border-radius:12px; padding:12px; margin-top:10px; }
     .empty { text-align:center; color:var(--muted); padding:18px; }
     .agent-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); }
+    .phone-panel { border:1px dashed var(--line); border-radius:10px; padding:10px; margin-top:10px; background:#fafbfc; }
   </style>
+  <script src="vendor/jssip.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <h1>کنسول تماس ۱۳۷</h1>
-    <p class="muted">صف کارشناس‌ها، تماس‌های منتظر، و سابقه تماس‌های ثبت‌شده. صدا روی همان سافت‌فون داخلی <b>2001</b> پخش می‌شود (همان تنظیم MicroSIP: <code>192.168.1.70:5066</code>).</p>
+    <p class="muted">جواب و مکالمه داخل همین صفحه (WebRTC). صفحه را حتماً با <b>HTTPS</b> باز کنید و اجازه میکروفون بدهید. ضبط/ثبت تماس مثل قبل خودکار است.</p>
 
     <div class="status-bar">
-      <span id="meStatus" class="pill warn">وضعیت داخلی ۲۰۰۱: در حال بررسی...</span>
+      <span id="webrtcStatus" class="pill warn">WebRTC: در حال اتصال...</span>
       <span id="queueStatus" class="pill">صف ۸۰۰۲: —</span>
       <span id="clock" class="muted"></span>
       <button type="button" id="btnRefresh" class="secondary">بروزرسانی</button>
+      <button type="button" id="btnHangupCall" class="danger" disabled>قطع مکالمه</button>
     </div>
     <p id="error" class="err"></p>
 
@@ -55,6 +58,10 @@
         <div class="muted" id="agentsSummary">کارشناس آنلاین: —</div>
         <div id="agentsBox" style="margin-top:10px"></div>
         <div id="callsBox"></div>
+        <div class="phone-panel">
+          <div class="muted">صوت تماس جاری</div>
+          <audio id="remoteAudio" autoplay playsinline></audio>
+        </div>
         <audio id="ringTone" preload="auto" loop>
           <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav" />
         </audio>
@@ -73,9 +80,7 @@
   </div>
 
   <script>
-    // آماده — بدون فرم تنظیمات
     const API_KEY = "dev-internal-key-137";
-    const AGENT_EXT = "2001";
     const headers = () => ({
       "X-Api-Key": API_KEY,
       "Accept": "application/json",
@@ -84,6 +89,12 @@
 
     const el = (id) => document.getElementById(id);
     let lastWaiting = 0;
+    let agentExt = "2101";
+    let phoneCfg = null;
+    let ua = null;
+    let currentSession = null;
+    let webrtcReady = false;
+    let autoAnswer = true;
 
     function outcomeFa(code) {
       return ({ ANSWERED: "پاسخ داده شد", NO_ANSWER: "بدون پاسخ" })[code] || code || "—";
@@ -97,6 +108,108 @@
       let url = file.listenUrl;
       if (url.startsWith("/api/v1/demo/")) url += (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(API_KEY);
       return '<audio controls preload="none" src="' + url + '"></audio>';
+    }
+
+    function setWebRtcStatus(text, cls) {
+      el("webrtcStatus").textContent = text;
+      el("webrtcStatus").className = "pill" + (cls ? " " + cls : "");
+    }
+
+    function attachRemote(session) {
+      const audio = el("remoteAudio");
+      session.connection.addEventListener("addstream", function (e) {
+        audio.srcObject = e.stream;
+        audio.play().catch(function () {});
+      });
+      session.connection.addEventListener("track", function (e) {
+        if (!audio.srcObject) audio.srcObject = new MediaStream();
+        audio.srcObject.addTrack(e.track);
+        audio.play().catch(function () {});
+      });
+    }
+
+    function bindSession(session) {
+      currentSession = session;
+      el("btnHangupCall").disabled = false;
+      setWebRtcStatus("WebRTC: در تماس", "ring");
+      attachRemote(session);
+      session.on("ended", function () {
+        currentSession = null;
+        el("btnHangupCall").disabled = true;
+        el("remoteAudio").srcObject = null;
+        setWebRtcStatus(webrtcReady ? "WebRTC: آماده" : "WebRTC: قطع", webrtcReady ? "" : "bad");
+      });
+      session.on("failed", function () {
+        currentSession = null;
+        el("btnHangupCall").disabled = true;
+        el("remoteAudio").srcObject = null;
+        setWebRtcStatus(webrtcReady ? "WebRTC: آماده" : "WebRTC: خطا", webrtcReady ? "warn" : "bad");
+      });
+    }
+
+    async function initWebRtc() {
+      if (typeof JsSIP === "undefined") {
+        setWebRtcStatus("WebRTC: کتابخانه JsSIP لود نشد", "bad");
+        return;
+      }
+      if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+        setWebRtcStatus("WebRTC: صفحه را با HTTPS باز کنید", "bad");
+        el("error").textContent = "میکروفون مرورگر فقط روی HTTPS کار می‌کند (مثلاً دامنه nginx کارتابل).";
+        return;
+      }
+
+      const res = await fetch("/api/v1/phone-calls/config", { headers: headers() });
+      const cfg = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(cfg.message || ("config HTTP " + res.status));
+      phoneCfg = cfg;
+      agentExt = cfg.agentExten || "2101";
+
+      if (!cfg.webrtc || !cfg.webrtc.enabled) {
+        setWebRtcStatus("WebRTC: در Telephony تنظیم نشده", "bad");
+        el("error").textContent = "WssUrl / SipUsername / SipPassword را در appsettings ست کنید.";
+        return;
+      }
+
+      const w = cfg.webrtc;
+      const socket = new JsSIP.WebSocketInterface(w.wssUrl);
+      const stun = (w.stunServers && w.stunServers.length) ? w.stunServers : ["stun:stun.l.google.com:19302"];
+      const configuration = {
+        sockets: [socket],
+        uri: w.sipUri,
+        password: w.sipPassword,
+        display_name: "Kartabl-" + (w.sipUsername || agentExt),
+        register: true,
+        session_timers: false,
+        connection_recovery_max_interval: 30,
+        connection_recovery_min_interval: 2
+      };
+
+      ua = new JsSIP.UA(configuration);
+      ua.on("registered", function () {
+        webrtcReady = true;
+        setWebRtcStatus("WebRTC: آماده (" + (w.sipUsername || agentExt) + ")", "");
+      });
+      ua.on("unregistered", function () {
+        webrtcReady = false;
+        setWebRtcStatus("WebRTC: خارج از ثبت", "warn");
+      });
+      ua.on("registrationFailed", function (e) {
+        webrtcReady = false;
+        setWebRtcStatus("WebRTC: رجیستر ناموفق", "bad");
+        el("error").textContent = "رجیستر WebRTC ناموفق: " + (e && e.cause ? e.cause : "unknown");
+      });
+      ua.on("newRTCSession", function (data) {
+        const session = data.session;
+        if (session.direction !== "incoming") return;
+        bindSession(session);
+        if (autoAnswer) {
+          session.answer({
+            mediaConstraints: { audio: true, video: false },
+            pcConfig: { iceServers: stun.map(function (u) { return { urls: u }; }) }
+          });
+        }
+      });
+      ua.start();
     }
 
     async function loadHistory() {
@@ -122,20 +235,14 @@
       }).join("");
     }
 
-    function peerForAgent(peers) {
-      return (peers || []).find(p => String(p.name) === AGENT_EXT);
-    }
-
     async function loadLive() {
       const res = await fetch("/api/v1/phone-calls/live", { headers: headers() });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || data.error || ("صف زنده: HTTP " + res.status));
       if (data.ok === false || data.configured === false) {
-        el("meStatus").textContent = "پل ایزابل وصل نیست";
-        el("meStatus").className = "pill bad";
         el("queueStatus").textContent = "صف ۸۰۰۲: قطع ارتباط";
         el("queueStatus").className = "pill bad";
-        el("agentsSummary").textContent = data.message || "Telephony/Bridge را روی سرور .12 چک کنید";
+        el("agentsSummary").textContent = data.message || "Telephony/Bridge را روی سرور چک کنید";
         el("agentsBox").innerHTML = "";
         el("callsBox").innerHTML = '<div class="empty">اتصال به ایزابل برقرار نیست</div>';
         throw new Error(data.message || "اتصال به IssabelBridge برقرار نیست");
@@ -143,7 +250,6 @@
 
       const members = data.members || [];
       const callers = data.callers || [];
-      const peers = data.peers || [];
       const online = typeof data.membersOnline === "number"
         ? data.membersOnline
         : members.filter(m => m.online).length;
@@ -155,17 +261,8 @@
       el("queueStatus").textContent = "صف ۸۰۰۲ — منتظر: " + waiting + " | آنلاین: " + online;
       el("queueStatus").className = waiting > 0 ? "pill ring" : "pill";
 
-      const me = peerForAgent(peers);
-      if (me && me.online) {
-        el("meStatus").textContent = "داخلی " + AGENT_EXT + ": آنلاین (" + (me.host || "") + ")";
-        el("meStatus").className = "pill";
-      } else {
-        el("meStatus").textContent = "داخلی " + AGENT_EXT + ": آفلاین — سافت‌فون را روی 192.168.1.70:5066 رجیستر کنید";
-        el("meStatus").className = "pill bad";
-      }
-
       if (!members.length) {
-        el("agentsBox").innerHTML = '<div class="muted">هنوز عضو صف خوانده نشد.</div>';
+        el("agentsBox").innerHTML = '<div class="muted">اعضای صف از AMI خوانده شد (صدا از WebRTC داخلی ' + agentExt + ').</div>';
       } else {
         el("agentsBox").innerHTML = members.map(m => {
           const cls = m.online ? "pill" : "pill bad";
@@ -182,18 +279,14 @@
             + "<div><b>تماس ورودی #" + (idx + 1) + "</b></div>"
             + "<div class='muted'><code>" + ch + "</code></div>"
             + '<div class="actions">'
-            + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب / وصل به ۲۰۰۱</button>'
+            + '<button type="button" data-act="answer" data-ch="' + ch.replace(/"/g, "") + '">جواب در کارتابل</button>'
             + '<button type="button" class="danger" data-act="reject" data-ch="' + ch.replace(/"/g, "") + '">قطع / رد</button>'
-            + '</div><div class="muted" style="margin-top:6px;font-size:.8rem">اگر سافت‌فون زنگ خورد، همان‌جا هم می‌توانی جواب بدهی. دکمه کارتابل تماس صف را به ۲۰۰۱ وصل می‌کند.</div></div>';
+            + '</div><div class="muted" style="margin-top:6px;font-size:.8rem">صدا داخل مرورگر (داخلی ' + agentExt + ') پخش می‌شود.</div></div>';
         }).join("");
       }
 
-      // صدای هشدار ساده وقتی تماس جدید وارد صف می‌شود
       try {
-        if (waiting > lastWaiting) {
-          // مرورگر ممکن است بدون gesture اجازه ندهد؛ مشکلی نیست
-          el("ringTone").play().catch(function(){});
-        }
+        if (waiting > lastWaiting) el("ringTone").play().catch(function () {});
         if (waiting === 0) el("ringTone").pause();
       } catch (_) {}
       lastWaiting = waiting;
@@ -201,10 +294,14 @@
     }
 
     async function control(action, channel) {
+      if (action === "answer" && !webrtcReady) {
+        throw new Error("اول WebRTC باید آماده (ثبت‌نام) شود.");
+      }
+      autoAnswer = true;
       const res = await fetch("/api/v1/phone-calls/control", {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ action: action, channel: channel, exten: AGENT_EXT, context: "from-internal" })
+        body: JSON.stringify({ action: action, channel: channel, exten: agentExt, context: "from-internal" })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) throw new Error(data.message || data.error || ("کنترل ناموفق " + res.status));
@@ -221,6 +318,12 @@
       finally { btn.disabled = false; }
     });
 
+    el("btnHangupCall").addEventListener("click", function () {
+      try {
+        if (currentSession) currentSession.terminate();
+      } catch (_) {}
+    });
+
     async function refreshAll() {
       el("error").textContent = "";
       const errs = [];
@@ -230,8 +333,16 @@
     }
 
     el("btnRefresh").addEventListener("click", refreshAll);
-    refreshAll();
-    setInterval(refreshAll, 5000);
+
+    (async function boot() {
+      try { await initWebRtc(); }
+      catch (e) {
+        setWebRtcStatus("WebRTC: خطا", "bad");
+        el("error").textContent = e.message || String(e);
+      }
+      refreshAll();
+      setInterval(refreshAll, 5000);
+    })();
   </script>
 </body>
 </html>
