@@ -33,6 +33,6 @@ public sealed class TelephonyOptions
     /// <summary>SIP auth password for WebRTC endpoint</summary>
     public string SipPassword { get; set; } = "";
 
-    /// <summary>Comma-separated STUN URLs</summary>
-    public string StunServers { get; set; } = "stun:stun.l.google.com:19302";
+    /// <summary>Comma-separated STUN URLs. Leave empty on LAN (Google STUN often slow/blocked in IR).</summary>
+    public string StunServers { get; set; } = "";
 }

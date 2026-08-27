@@ -158,6 +158,18 @@
       el("btnHangupCall").disabled = false;
       setWebRtcStatus("WebRTC: در تماس", "ring");
       attachRemote(session);
+      if (session.connection) {
+        session.connection.addEventListener("iceconnectionstatechange", function () {
+          const st = session.connection && session.connection.iceConnectionState;
+          if (st === "failed" || st === "disconnected") {
+            el("error").textContent = "ICE/رسانه قطع شد (" + st + "). روی ایزابل icesupport و media_address و فایروال UDP 10000-20000 را چک کنید.";
+            setWebRtcStatus("WebRTC: خطای رسانه", "bad");
+          } else if (st === "connected" || st === "completed") {
+            el("error").textContent = "";
+            setWebRtcStatus("WebRTC: در تماس (صدا OK)", "ring");
+          }
+        });
+      }
       session.on("ended", function () {
         currentSession = null;
         el("btnHangupCall").disabled = true;
@@ -199,9 +211,56 @@
       }
 
       const w = cfg.webrtc;
+      // اگر کارتابل از دامنه عمومی و WSS به IP داخلی برود، Chrome (Private Network Access)
+      // سوکت را قطع می‌کند. ترجیح: همان origin صفحه از طریق nginx /asterisk-wss
+      let wssUrl = w.wssUrl || "";
+      if (w.preferSameOriginWss === true || w.wssUrlMode === "same-origin") {
+        wssUrl = location.origin.replace(/^http/, "ws") + "/asterisk-wss/ws";
+      }
       setWebRtcStatus("WebRTC: در حال ثبت‌نام...", "warn");
-      const socket = new JsSIP.WebSocketInterface(w.wssUrl);
-      const stun = (w.stunServers && w.stunServers.length) ? w.stunServers : ["stun:stun.l.google.com:19302"];
+      el("error").textContent = "در حال اتصال WSS: " + wssUrl + " | صفحه: " + location.origin;
+
+      try {
+        const probeResult = await new Promise(function (resolve) {
+          let settled = false;
+          const done = function (msg) {
+            if (settled) return;
+            settled = true;
+            resolve(msg);
+          };
+          const probe = new WebSocket(wssUrl, "sip");
+          const t = setTimeout(function () {
+            try { probe.close(); } catch (e) {}
+            done("timeout");
+          }, 4000);
+          probe.onopen = function () {
+            clearTimeout(t);
+            try { probe.close(); } catch (e) {}
+            done("ok");
+          };
+          probe.onerror = function () {
+            clearTimeout(t);
+            done("error");
+          };
+          probe.onclose = function (ev) {
+            clearTimeout(t);
+            if (!settled) done("close:" + (ev.code || "") + ":" + (ev.reason || ""));
+          };
+        });
+        if (probeResult !== "ok") {
+          el("error").textContent =
+            "پروب WSS=" + probeResult + " | " + wssUrl +
+            " | کارتابل را از https://192.168.1.12:5007/kartabl/ باز کنید یا nginx /asterisk-wss را فعال کنید.";
+        }
+      } catch (probeErr) {
+        el("error").textContent = "پروب WSS استثنا: " + String(probeErr);
+      }
+
+      const socket = new JsSIP.WebSocketInterface(wssUrl);
+      try { socket.via_transport = "WSS"; } catch (e) {}
+      // روی LAN داخلی STUN گوگل اغلب کند/بسته است → تأخیر و بوق بدون صدا
+      const stun = Array.isArray(w.stunServers) ? w.stunServers.filter(Boolean) : [];
+      const iceServers = stun.map(function (u) { return { urls: u }; });
       const configuration = {
         sockets: [socket],
         uri: w.sipUri,
@@ -213,14 +272,22 @@
         connection_recovery_min_interval: 2
       };
 
+      if (location.search.indexOf("webrtcDebug=1") >= 0 && JsSIP.debug) {
+        try { JsSIP.debug.enable("JsSIP:*"); } catch (e) {}
+      }
+
       ua = new JsSIP.UA(configuration);
       ua.on("connected", function () {
         setWebRtcStatus("WebRTC: سوکت وصل — منتظر ثبت‌نام...", "warn");
       });
-      ua.on("disconnected", function () {
+      ua.on("disconnected", function (e) {
         webrtcReady = false;
+        const cause = e && e.cause ? String(e.cause) : "";
         setWebRtcStatus("WebRTC: قطع از WSS — جواب با 2001", "warn");
-        webrtcDetail = "wss-disconnected " + (w.wssUrl || "");
+        webrtcDetail = "wss-disconnected " + wssUrl + " " + cause;
+        el("error").textContent =
+          "WSS قطع: " + cause + " | " + wssUrl +
+          " | اگر صفحه از دامنه اینترنتی است → https://192.168.1.12:5007/kartabl/ را امتحان کنید.";
       });
       ua.on("registered", function () {
         webrtcReady = true;
@@ -237,10 +304,7 @@
         const cause = e && e.cause ? String(e.cause) : "unknown";
         setWebRtcStatus("WebRTC: رجیستر ناموفق — جواب با 2001", "warn");
         webrtcDetail = cause;
-        el("error").textContent = "رجیستر 2101 ناموفق (" + cause + "). روی ایزابل داخلی PJSIP/WSS را نصب کنید:\n"
-          + "asterisk -rx \"pjsip show endpoint 2101\"\n"
-          + "asterisk -rx \"pjsip show transports\"\n"
-          + "WSS: " + (w.wssUrl || "");
+        el("error").textContent = "رجیستر 2101 ناموفق (" + cause + "). WSS: " + wssUrl;
       });
       ua.on("newRTCSession", function (data) {
         const session = data.session;
@@ -249,7 +313,7 @@
         if (autoAnswer) {
           session.answer({
             mediaConstraints: { audio: true, video: false },
-            pcConfig: { iceServers: stun.map(function (u) { return { urls: u }; }) }
+            pcConfig: { iceServers: iceServers, iceCandidatePoolSize: 0 }
           });
         }
       });
