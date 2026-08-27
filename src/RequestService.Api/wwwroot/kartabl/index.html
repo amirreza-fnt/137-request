@@ -111,6 +111,7 @@
     let phoneCfg = null;
     let ua = null;
     let currentSession = null;
+    let lastAnswerChannel = "";
     let webrtcReady = false;
     let autoAnswer = true;
     let webrtcDetail = "";
@@ -139,17 +140,33 @@
 
     function attachRemote(session) {
       const audio = el("remoteAudio");
+      audio.autoplay = true;
+      audio.muted = false;
+      audio.volume = 1;
       const bindStream = function (stream) {
         audio.srcObject = stream;
-        audio.play().catch(function () {});
+        const p = audio.play();
+        if (p && p.catch) p.catch(function () {});
       };
       if (session.connection) {
         session.connection.addEventListener("addstream", function (e) { bindStream(e.stream); });
         session.connection.addEventListener("track", function (e) {
           if (!audio.srcObject) audio.srcObject = new MediaStream();
           audio.srcObject.addTrack(e.track);
-          audio.play().catch(function () {});
+          const p = audio.play();
+          if (p && p.catch) p.catch(function () {});
         });
+        // اگر track از قبل آمده
+        try {
+          const receivers = session.connection.getReceivers ? session.connection.getReceivers() : [];
+          receivers.forEach(function (r) {
+            if (r.track && r.track.kind === "audio") {
+              if (!audio.srcObject) audio.srcObject = new MediaStream();
+              audio.srcObject.addTrack(r.track);
+              audio.play().catch(function () {});
+            }
+          });
+        } catch (_) {}
       }
     }
 
@@ -409,6 +426,7 @@
 
     async function control(action, channel) {
       autoAnswer = true;
+      if (action === "answer") lastAnswerChannel = channel || "";
       const exten = action === "answer" ? answerExten() : agentExt;
       const res = await fetch("/api/v1/phone-calls/control", {
         method: "POST",
@@ -430,8 +448,15 @@
       finally { btn.disabled = false; }
     });
 
-    el("btnHangupCall").addEventListener("click", function () {
+    el("btnHangupCall").addEventListener("click", async function () {
       try { if (currentSession) currentSession.terminate(); } catch (_) {}
+      // قطع سمت ایزابل تا MixMonitor/ثبت درخواست هم اجرا شود
+      if (lastAnswerChannel) {
+        try {
+          await control("hangup", lastAnswerChannel);
+        } catch (_) {}
+        lastAnswerChannel = "";
+      }
     });
 
     async function refreshAll() {
@@ -450,7 +475,7 @@
         el("error").textContent = e.message || String(e);
       }
       refreshAll();
-      setInterval(refreshAll, 5000);
+      setInterval(refreshAll, 2000);
     })();
   </script>
 </body>
