@@ -134,6 +134,15 @@
       return webrtcReady ? agentExt : FALLBACK_SIP_EXT;
     }
 
+    function callerChannel(c) {
+      if (!c) return "";
+      let ch = String(c.channel || c.Channel || "").trim();
+      if (ch) return ch;
+      const raw = String(c.raw || c.Raw || "");
+      const m = raw.match(/(SIP\/[^\s,)]+|PJSIP\/[^\s,)]+|Local\/[^\s,)]+|DAHDI\/[^\s,)]+|IAX2\/[^\s,)]+)/);
+      return m ? m[1] : "";
+    }
+
     function setWebRtcStatus(text, cls) {
       el("webrtcStatus").textContent = text;
       el("webrtcStatus").className = "pill" + (cls ? " " + cls : "");
@@ -402,13 +411,14 @@
         el("callsBox").innerHTML = '<div class="empty">تماس منتظری در صف نیست</div>';
       } else {
         el("callsBox").innerHTML = callers.map((c, idx) => {
-          const ch = c.channel || c.Channel || "";
+          const ch = callerChannel(c);
+          const noCh = !ch;
           return '<div class="call-card">'
             + "<div><b>تماس ورودی #" + (idx + 1) + "</b></div>"
-            + "<div class='muted'><code>" + String(ch).replace(/</g, "&lt;") + "</code></div>"
+            + "<div class='muted'><code>" + (ch ? String(ch).replace(/</g, "&lt;") : "— کانال پیدا نشد —") + "</code></div>"
             + '<div class="actions">'
-            + '<button type="button" data-act="answer" data-idx="' + idx + '">جواب (' + target + ')</button>'
-            + '<button type="button" class="danger" data-act="reject" data-idx="' + idx + '">قطع / رد</button>'
+            + '<button type="button" data-act="answer" data-idx="' + idx + '"' + (noCh ? " disabled" : "") + ">جواب (" + target + ")</button>"
+            + '<button type="button" class="danger" data-act="reject" data-idx="' + idx + '"' + (noCh ? " disabled" : "") + ">قطع / رد</button>"
             + "</div>"
             + '<div class="muted" style="margin-top:6px;font-size:.8rem">'
             + (webrtcReady
@@ -452,7 +462,7 @@
       try {
         const idx = parseInt(btn.getAttribute("data-idx") || "-1", 10);
         const row = (idx >= 0 && callersCache[idx]) ? callersCache[idx] : null;
-        const ch = row ? (row.channel || row.Channel || "") : "";
+        const ch = callerChannel(row);
         await control(btn.getAttribute("data-act"), ch);
       }
       catch (e) { el("error").textContent = e.message || String(e); }
