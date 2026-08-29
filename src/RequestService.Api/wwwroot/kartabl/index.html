@@ -37,6 +37,7 @@
     table.history .col-time { width:140px; }
     table.history .col-audio { width:auto; min-width:220px; }
     table.history audio { width:100%; min-width:200px; max-width:100%; display:block; height:36px; }
+    table.history .audio-cell a { font-size:.82rem; margin-inline-start:6px; white-space:nowrap; }
     .call-card { border:2px solid var(--ring); background:#f5faff; border-radius:12px; padding:12px; margin-top:10px; }
     .empty { text-align:center; color:var(--muted); padding:18px; }
     .agent-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); }
@@ -123,12 +124,23 @@
     function formatTime(utc) {
       try { return new Date(utc).toLocaleString("fa-IR"); } catch { return utc || "—"; }
     }
+    function escHtml(s) {
+      return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    }
     function audioCell(item) {
       const file = (item.files || [])[0];
       if (!file || !file.listenUrl) return '<span class="muted">—</span>';
       let url = file.listenUrl;
-      if (url.startsWith("/api/v1/demo/")) url += (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(API_KEY);
-      return '<audio controls preload="metadata" controlsList="nodownload" src="' + url + '"></audio>';
+      if (url.startsWith("/api/v1/demo/")) {
+        const q = "key=" + encodeURIComponent(API_KEY);
+        url += (url.includes("?") ? "&" : "?") + q;
+      }
+      const dl = url + (url.includes("?") ? "&" : "?") + "download=true";
+      const name = (item.trackingCode || "recording") + ".wav";
+      return '<div class="audio-cell">'
+        + '<audio controls preload="metadata" src="' + escHtml(url) + '"></audio>'
+        + ' <a href="' + escHtml(dl) + '" download="' + escHtml(name) + '">دانلود</a>'
+        + "</div>";
     }
     function answerExten() {
       return webrtcReady ? agentExt : FALLBACK_SIP_EXT;
@@ -148,36 +160,45 @@
       el("webrtcStatus").className = "pill" + (cls ? " " + cls : "");
     }
 
-    function attachRemote(session) {
+    function attachRemoteToPeerConnection(pc) {
+      if (!pc) return;
       const audio = el("remoteAudio");
       audio.autoplay = true;
       audio.muted = false;
       audio.volume = 1;
-      const bindStream = function (stream) {
+      const bind = function (stream) {
+        if (!stream) return;
         audio.srcObject = stream;
         const p = audio.play();
-        if (p && p.catch) p.catch(function () {});
+        if (p && p.catch) {
+          p.catch(function () {
+            el("error").textContent = "پخش خودکار صدا مسدود شد — یک‌بار روی ▶ در پخش‌کننده پایین کلیک کنید.";
+          });
+        }
       };
-      if (session.connection) {
-        session.connection.addEventListener("addstream", function (e) { bindStream(e.stream); });
-        session.connection.addEventListener("track", function (e) {
+      pc.addEventListener("track", function (e) {
+        if (e.streams && e.streams[0]) bind(e.streams[0]);
+        else if (e.track) {
           if (!audio.srcObject) audio.srcObject = new MediaStream();
           audio.srcObject.addTrack(e.track);
-          const p = audio.play();
-          if (p && p.catch) p.catch(function () {});
-        });
-        // اگر track از قبل آمده
-        try {
-          const receivers = session.connection.getReceivers ? session.connection.getReceivers() : [];
-          receivers.forEach(function (r) {
-            if (r.track && r.track.kind === "audio") {
-              if (!audio.srcObject) audio.srcObject = new MediaStream();
+          audio.play().catch(function () {});
+        }
+      });
+      try {
+        pc.getReceivers().forEach(function (r) {
+          if (r.track && r.track.kind === "audio") {
+            if (!audio.srcObject) audio.srcObject = new MediaStream();
+            if (!audio.srcObject.getTracks().some(function (t) { return t.id === r.track.id; })) {
               audio.srcObject.addTrack(r.track);
               audio.play().catch(function () {});
             }
-          });
-        } catch (_) {}
-      }
+          }
+        });
+      } catch (_) {}
+    }
+
+    function attachRemote(session) {
+      if (session.connection) attachRemoteToPeerConnection(session.connection);
     }
 
     function bindSession(session) {
@@ -336,6 +357,15 @@
       ua.on("newRTCSession", function (data) {
         const session = data.session;
         if (session.direction !== "incoming") return;
+        session.on("peerconnection", function (e) {
+          attachRemoteToPeerConnection(e.peerconnection || session.connection);
+        });
+        session.on("accepted", function () {
+          attachRemote(session);
+        });
+        session.on("confirmed", function () {
+          attachRemote(session);
+        });
         bindSession(session);
         if (autoAnswer) {
           session.answer({
@@ -480,10 +510,20 @@
       }
     });
 
+    function isHistoryAudioPlaying() {
+      const audios = document.querySelectorAll("#rows audio");
+      for (let i = 0; i < audios.length; i++) {
+        if (!audios[i].paused && audios[i].currentTime > 0) return true;
+      }
+      return false;
+    }
+
     async function refreshAll() {
       const errs = [];
       try { await loadLive(); } catch (e) { errs.push(e.message || String(e)); }
-      try { await loadHistory(); } catch (e) { errs.push(e.message || String(e)); }
+      if (!isHistoryAudioPlaying()) {
+        try { await loadHistory(); } catch (e) { errs.push(e.message || String(e)); }
+      }
       if (errs.length && !el("error").textContent) el("error").textContent = errs.join("\n");
     }
 
@@ -496,7 +536,10 @@
         el("error").textContent = e.message || String(e);
       }
       refreshAll();
-      setInterval(refreshAll, 2000);
+      setInterval(function () { loadLive().catch(function () {}); }, 2000);
+      setInterval(function () {
+        if (!isHistoryAudioPlaying()) loadHistory().catch(function () {});
+      }, 15000);
     })();
   </script>
 </body>

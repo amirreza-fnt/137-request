@@ -27,7 +27,11 @@ public sealed class DemoFilesController : ControllerBase
 
     /// <summary>GET /api/v1/demo/files/{fileId}/audio — play/download a request attachment.</summary>
     [HttpGet("{fileId}/audio")]
-    public async Task<IActionResult> StreamAudio(string fileId, [FromQuery] string? key, CancellationToken cancellationToken)
+    public async Task<IActionResult> StreamAudio(
+        string fileId,
+        [FromQuery] string? key,
+        [FromQuery] bool download,
+        CancellationToken cancellationToken)
     {
         if (!IsValidApiKey(Request.Headers[_internalAuth.Value.HeaderName].ToString(), key))
         {
@@ -47,8 +51,20 @@ public sealed class DemoFilesController : ControllerBase
                 return NotFound(new { code = "NOT_FOUND", message = "Audio file was not found in the files service." });
             }
 
+            var contentType = result.ContentType ?? "audio/wav";
+            if (!contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+            {
+                contentType = "audio/wav";
+            }
+
             Response.Headers.CacheControl = "private, max-age=300";
-            return File(result.Content, result.ContentType ?? "audio/wav", result.FileName);
+            if (download)
+            {
+                return File(result.Content, contentType, result.FileName);
+            }
+
+            Response.Headers.ContentDisposition = $"inline; filename=\"{result.FileName}\"";
+            return File(result.Content, contentType);
         }
         catch (DependencyUnavailableException ex)
         {

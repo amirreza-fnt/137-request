@@ -38,13 +38,52 @@ public sealed class FileServiceClient : IFileServiceClient
         EnsureFilesBaseUrl();
 
         var meta = await GetFileInternalAsync(fileId, ct);
-        if (meta is null || string.IsNullOrWhiteSpace(meta.ShortCode))
+        if (meta is null)
         {
             return null;
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/i/{meta.ShortCode}");
+        var paths = new List<string> { $"/api/files/{fileId}/download" };
+        if (!string.IsNullOrWhiteSpace(meta.ShortCode))
+        {
+            paths.Add($"/i/{meta.ShortCode}");
+        }
+
+        Exception? lastError = null;
+        foreach (var path in paths)
+        {
+            try
+            {
+                var streamed = await TryStreamPathAsync(path, fileId, meta, ct);
+                if (streamed is not null)
+                {
+                    return streamed;
+                }
+            }
+            catch (DependencyUnavailableException ex)
+            {
+                lastError = ex;
+            }
+        }
+
+        if (lastError is not null)
+        {
+            throw lastError;
+        }
+
+        return null;
+    }
+
+    private async Task<FileStreamResult?> TryStreamPathAsync(
+        string path,
+        string fileId,
+        FileMetadataDto meta,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
         ApplyAuth(request);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("audio/*"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
 
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -55,7 +94,13 @@ public sealed class FileServiceClient : IFileServiceClient
         if (!response.IsSuccessStatusCode)
         {
             throw new DependencyUnavailableException(
-                $"Files service returned HTTP {(int)response.StatusCode} while streaming '{fileId}'.");
+                $"Files service returned HTTP {(int)response.StatusCode} while streaming '{fileId}' from '{path}'.");
+        }
+
+        var mediaType = response.Content.Headers.ContentType?.MediaType ?? "";
+        if (mediaType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
         }
 
         await using var network = await response.Content.ReadAsStreamAsync(ct);
@@ -63,7 +108,7 @@ public sealed class FileServiceClient : IFileServiceClient
         await network.CopyToAsync(buffer, ct);
         buffer.Position = 0;
 
-        var contentType = response.Content.Headers.ContentType?.MediaType ?? meta.MimeType ?? "audio/wav";
+        var contentType = NormalizeAudioContentType(mediaType, meta.Extension);
         var extension = meta.Extension;
         if (string.IsNullOrWhiteSpace(extension))
         {
@@ -76,6 +121,21 @@ public sealed class FileServiceClient : IFileServiceClient
 
         var fileName = $"recording-{fileId}{extension}";
         return new FileStreamResult(buffer, contentType, fileName);
+    }
+
+    private static string NormalizeAudioContentType(string? contentType, string? extension)
+    {
+        var ext = (extension ?? "").Trim().TrimStart('.').ToLowerInvariant();
+        if (ext is "wav") return "audio/wav";
+        if (ext is "mp3") return "audio/mpeg";
+        if (ext is "ogg" or "oga") return "audio/ogg";
+        if (ext is "m4a" or "aac") return "audio/mp4";
+        if (!string.IsNullOrWhiteSpace(contentType)
+            && contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return contentType;
+        }
+        return "audio/wav";
     }
 
     private async Task<FileMetadataDto?> GetFileInternalAsync(string fileId, CancellationToken ct)
