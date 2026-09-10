@@ -20,9 +20,10 @@ public sealed class RequestService : IRequestService
     private readonly IValidator<CreateRequestRequest> _validator;
     private readonly ISsoAuthClient _ssoAuthClient;
     private readonly IFileServiceClient _fileServiceClient;
-    private readonly ITrackingCodeGenerator _trackingCodeGenerator;
+    private readonly ICodingServiceClient _codingServiceClient;
     private readonly IRequestRepository _repository;
     private readonly IOptions<InternalAuthOptions> _internalAuthOptions;
+    private readonly IOptions<CodingOptions> _codingOptions;
     private readonly IOptions<FilesOptions> _filesOptions;
     private readonly ILogger<RequestService> _logger;
 
@@ -30,18 +31,20 @@ public sealed class RequestService : IRequestService
         IValidator<CreateRequestRequest> validator,
         ISsoAuthClient ssoAuthClient,
         IFileServiceClient fileServiceClient,
-        ITrackingCodeGenerator trackingCodeGenerator,
+        ICodingServiceClient codingServiceClient,
         IRequestRepository repository,
         IOptions<InternalAuthOptions> internalAuthOptions,
+        IOptions<CodingOptions> codingOptions,
         IOptions<FilesOptions> filesOptions,
         ILogger<RequestService> logger)
     {
         _validator = validator;
         _ssoAuthClient = ssoAuthClient;
         _fileServiceClient = fileServiceClient;
-        _trackingCodeGenerator = trackingCodeGenerator;
+        _codingServiceClient = codingServiceClient;
         _repository = repository;
         _internalAuthOptions = internalAuthOptions;
+        _codingOptions = codingOptions;
         _filesOptions = filesOptions;
         _logger = logger;
     }
@@ -69,13 +72,19 @@ public sealed class RequestService : IRequestService
         // ---------- 4. Validate attached file ids against the files service ----------
         var fileEntities = await ValidateAndBuildFilesAsync(request.FileIds, ct);
 
-        // ---------- 5. Unique tracking code ----------
-        var trackingCode = await _trackingCodeGenerator.GenerateAsync(ct);
-        if (await _repository.TrackingCodeExistsAsync(trackingCode, ct))
-        {
-            // Extremely unlikely with a monotonic sequence; retry once.
-            trackingCode = await _trackingCodeGenerator.GenerateAsync(ct);
-        }
+        // ---------- 5. Tracking code from centralized coding service (5-digit) ----------
+        var citizen = ResolveCodingCitizen(request, caller);
+        var codingApiKey = ResolveCodingApiKey(apiKeyHeader);
+        var coding = await _codingServiceClient.AllocateTrackingCodeAsync(
+            citizen.NationalCode,
+            citizen.FirstName,
+            citizen.LastName,
+            citizen.Mobile,
+            citizen.Landline,
+            string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            codingApiKey,
+            ct);
+        var trackingCode = coding.TrackingCode;
 
         // ---------- 6. Build aggregates ----------
         var now = DateTime.UtcNow;
@@ -488,6 +497,72 @@ public sealed class RequestService : IRequestService
 
         return JsonSerializer.Serialize(meta);
     }
+
+    private string ResolveCodingApiKey(string? apiKeyHeader)
+    {
+        if (!string.IsNullOrWhiteSpace(apiKeyHeader) && IsValidApiKey(apiKeyHeader))
+        {
+            return apiKeyHeader.Trim();
+        }
+
+        var configured = _codingOptions.Value.ServiceToken;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured.Trim();
+        }
+
+        var fallback = _internalAuthOptions.Value.ApiKeys
+            .FirstOrDefault(k => !string.IsNullOrWhiteSpace(k.Key))?.Key;
+
+        if (string.IsNullOrWhiteSpace(fallback))
+        {
+            throw new NotAuthenticatedException("Coding service API key is not configured.");
+        }
+
+        return fallback;
+    }
+
+    private static CodingCitizenInfo ResolveCodingCitizen(CreateRequestRequest request, CallerContext caller)
+    {
+        var nationalCode = NormalizeNationalCode(request.Citizen?.NationalCode) ?? caller.MelliCode;
+        if (string.IsNullOrWhiteSpace(nationalCode))
+        {
+            throw new DomainValidationException("National code is required to allocate a tracking code.");
+        }
+
+        var firstName = request.Citizen?.FirstName?.Trim();
+        var lastName = request.Citizen?.LastName?.Trim();
+        var phone = request.Citizen?.PhoneNumber?.Trim() ?? caller.Phone?.Trim();
+
+        string? mobile = null;
+        string? landline = null;
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            var digits = new string(phone.Where(char.IsDigit).ToArray());
+            if (digits.Length == 11 && digits.StartsWith("09", StringComparison.Ordinal))
+            {
+                mobile = digits;
+            }
+            else
+            {
+                landline = phone;
+            }
+        }
+
+        return new CodingCitizenInfo(
+            nationalCode,
+            string.IsNullOrWhiteSpace(firstName) ? "نامشخص" : firstName,
+            string.IsNullOrWhiteSpace(lastName) ? "نامشخص" : lastName,
+            mobile,
+            landline);
+    }
+
+    private sealed record CodingCitizenInfo(
+        string NationalCode,
+        string FirstName,
+        string LastName,
+        string? Mobile,
+        string? Landline);
 
     private bool IsValidApiKey(string? apiKeyHeader)
     {

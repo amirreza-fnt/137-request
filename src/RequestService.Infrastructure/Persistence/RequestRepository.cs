@@ -20,38 +20,6 @@ public sealed class RequestRepository : IRequestRepository
         _db = db;
     }
 
-    public async Task<long> GetNextSequenceValueAsync(CancellationToken ct)
-    {
-        // Sequence created by the initial migration; monotonic → race-free.
-        // (NEXT VALUE FOR must not be wrapped in a subquery, so use ADO.NET directly.)
-        var connection = _db.Database.GetDbConnection();
-        var opened = connection.State != System.Data.ConnectionState.Open;
-
-        if (opened)
-        {
-            await connection.OpenAsync(ct);
-        }
-
-        try
-        {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT NEXT VALUE FOR dbo.RequestTrackingCodeSeq";
-            var result = await cmd.ExecuteScalarAsync(ct);
-            return Convert.ToInt64(result);
-        }
-        finally
-        {
-            if (opened)
-            {
-                await connection.CloseAsync();
-            }
-        }
-    }
-
-    public async Task<bool> TrackingCodeExistsAsync(string trackingCode, CancellationToken ct)
-        => await _db.Requests.AsNoTracking()
-            .AnyAsync(r => r.TrackingCode == trackingCode, ct);
-
     public async Task<bool> RequestFileExistsAsync(string fileId, CancellationToken ct)
         => await _db.RequestFiles.AsNoTracking()
             .AnyAsync(f => f.FileId == fileId, ct);
@@ -86,6 +54,16 @@ public sealed class RequestRepository : IRequestRepository
         if (digits.Length == 0)
         {
             return null;
+        }
+
+        if (digits.Length <= 5)
+        {
+            var padded = digits.PadLeft(5, '0');
+            exact = await GetByTrackingCodeAsync(padded, ct);
+            if (exact is not null)
+            {
+                return exact;
+            }
         }
 
         return await _db.Requests

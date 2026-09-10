@@ -30,6 +30,12 @@ public static class DependencyInjection
         services.Configure<InternalAuthOptions>(configuration.GetSection(InternalAuthOptions.SectionName));
         services.Configure<TelephonyOptions>(configuration.GetSection(TelephonyOptions.SectionName));
 
+        services.AddOptions<CodingOptions>()
+            .Bind(configuration.GetSection(CodingOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.BaseUrl), "Coding:BaseUrl is required.")
+            .Validate(o => o.SystemId > 0, "Coding:SystemId must be greater than zero.")
+            .ValidateOnStart();
+
         // ---------- Validation ----------
         services.AddValidatorsFromAssemblyContaining<CreateRequestValidator>();
 
@@ -47,8 +53,6 @@ public static class DependencyInjection
         // ---------- Persistence ----------
         services.AddScoped<IRequestRepository, RequestRepository>();
 
-        // ---------- Application services ----------
-        services.AddScoped<ITrackingCodeGenerator, RequestService.Application.Services.TrackingCodeGenerator>();
         services.AddScoped<IRequestService, RequestService.Application.Services.RequestService>();
 
         // ---------- Downstream HTTP clients (retry + circuit breaker) ----------
@@ -123,6 +127,23 @@ public static class DependencyInjection
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
             });
         }
+
+        var coding = configuration.GetSection(CodingOptions.SectionName).Get<CodingOptions>() ?? new CodingOptions();
+        services.AddHttpClient<ICodingServiceClient, CodingServiceClient>(client =>
+        {
+            client.BaseAddress = new Uri(EnsureTrailingSlash(coding.BaseUrl));
+            client.Timeout = TimeSpan.FromSeconds(coding.TimeoutSeconds + 5);
+        }).AddStandardResilienceHandler(opt =>
+        {
+            opt.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(coding.TimeoutSeconds + 2);
+            opt.AttemptTimeout.Timeout = TimeSpan.FromSeconds(coding.TimeoutSeconds);
+            opt.Retry.MaxRetryAttempts = coding.RetryCount;
+            opt.Retry.Delay = TimeSpan.FromMilliseconds(300);
+            opt.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+            opt.CircuitBreaker.MinimumThroughput = coding.CircuitBreakerMinThroughput;
+            opt.CircuitBreaker.FailureRatio = coding.CircuitBreakerFailureRatio / 100.0;
+            opt.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+        });
 
         return services;
     }

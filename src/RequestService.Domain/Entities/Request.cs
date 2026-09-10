@@ -11,7 +11,7 @@ public class Request
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    /// <summary>Unique, human-readable tracking code shown to the citizen (e.g. 137-20260812-000482).</summary>
+    /// <summary>5-digit tracking code from the centralized coding service (e.g. 00042).</summary>
     public string TrackingCode { get; set; } = string.Empty;
 
     /// <summary>National code of the citizen. Nullable (telephony scenario without verified identity).</summary>

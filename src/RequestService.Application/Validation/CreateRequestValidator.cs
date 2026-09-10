@@ -44,6 +44,13 @@ public sealed class CreateRequestValidator : AbstractValidator<CreateRequestRequ
             .When(x => x.Channel == RequestChannel.OperatorApp);
 
         RuleFor(x => x.Citizen!.NationalCode)
+            .NotEmpty()
+            .WithMessage("Citizen.NationalCode is required to allocate a tracking code.")
+            .When(x => x.Channel is RequestChannel.PhoneCall
+                or RequestChannel.OperatorApp
+                or RequestChannel.InternalService);
+
+        RuleFor(x => x.Citizen!.NationalCode)
             .Matches("^[0-9]{10}$")
             .WithMessage("Citizen.NationalCode must be exactly 10 digits.")
             .When(x => !string.IsNullOrWhiteSpace(x.Citizen?.NationalCode));

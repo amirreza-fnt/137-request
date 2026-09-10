@@ -10,11 +10,6 @@ namespace RequestService.Application.Interfaces;
 /// </summary>
 public interface IRequestRepository
 {
-    /// <summary>Next value of the DB sequence used to build tracking codes.</summary>
-    Task<long> GetNextSequenceValueAsync(CancellationToken ct);
-
-    Task<bool> TrackingCodeExistsAsync(string trackingCode, CancellationToken ct);
-
     Task<bool> RequestFileExistsAsync(string fileId, CancellationToken ct);
 
     Task<Request?> GetByIdAsync(Guid id, CancellationToken ct);
@@ -22,8 +17,8 @@ public interface IRequestRepository
     Task<Request?> GetByTrackingCodeAsync(string trackingCode, CancellationToken ct);
 
     /// <summary>
-    /// Full tracking code or digit-only form (AGI <c>say_digits</c> strips dashes),
-    /// e.g. <c>13714050526-000010</c> ↔ <c>137-14050526-000010</c>.
+    /// Full 5-digit tracking code or digit-only TTS form (e.g. <c>42</c> → <c>00042</c>).
+    /// Legacy dashed codes from older records are still matched when present.
     /// </summary>
     Task<Request?> FindByTrackingCodeFlexibleAsync(string codeOrDigits, CancellationToken ct);
 

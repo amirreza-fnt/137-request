@@ -43,7 +43,7 @@
                 "exec": [
                   "pm.test('Status 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('Has trackingCode', () => pm.expect(body.trackingCode).to.match(/^137-\\d{8}-\\d{6}$/));",
+                  "pm.test('Has trackingCode', () => pm.expect(body.trackingCode).to.match(/^\\d{5}$/));",
                   "pm.environment.set('trackingCode', body.trackingCode);",
                   "pm.environment.set('requestId', body.requestId);"
                 ]

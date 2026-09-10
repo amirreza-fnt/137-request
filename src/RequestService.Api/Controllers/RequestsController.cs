@@ -63,8 +63,8 @@ public sealed class RequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets a request by tracking code. Accepts dashed form
-    /// (<c>137-14050526-000010</c>) or digits-only TTS form.
+    /// Gets a request by tracking code. Accepts the 5-digit code (e.g. <c>00042</c>)
+    /// or digits-only TTS form (e.g. <c>42</c>).
     /// </summary>
     [HttpGet("by-tracking-code/{code}")]
     [ProducesResponseType(typeof(RequestDetailResponse), StatusCodes.Status200OK)]
