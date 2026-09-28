@@ -17,12 +17,27 @@ echo "============================================"
 echo "   Deploying $APP_NAME"
 echo "============================================"
 
+# Ensure service account exists before publish (ownership fix below).
+sudo useradd -r -s /usr/sbin/nologin requestservice 2>/dev/null || true
+sudo mkdir -p /var/log/requestservice
+sudo chown requestservice:requestservice /var/log/requestservice
+
+# Stop before publish so DLLs are not locked; wipe output to avoid mixed builds
+# (mixed DLLs cause Swagger BadImageFormatException on /swagger/v1/swagger.json).
+echo "[0/4] Stopping service and cleaning $API_DIR ..."
+sudo systemctl stop "$APP_NAME" 2>/dev/null || true
+sudo mkdir -p "$API_DIR"
+sudo rm -rf "${API_DIR:?}"/*
+
 # 1. Build & Publish
 echo "[1/4] Publishing application..."
+dotnet clean src/RequestService.Api/RequestService.Api.csproj -c Release >/dev/null 2>&1 || true
 dotnet publish src/RequestService.Api/RequestService.Api.csproj \
     -c Release \
     -o "$API_DIR" \
     --self-contained false
+
+sudo chown -R requestservice:requestservice "$API_DIR"
 
 # 2. Copy nginx config
 echo "[2/4] Setting up nginx..."
@@ -39,11 +54,6 @@ if [ -f "$SERVICE_FILE" ]; then
     echo "  systemd unit already exists, skipping... (edit $SERVICE_FILE directly)"
 else
     sudo cp deploy/requestservice.service "$SERVICE_FILE"
-    # Create the dedicated service account + log dir (first install only)
-    sudo useradd -r -s /usr/sbin/nologin requestservice || true
-    sudo mkdir -p /var/log/requestservice
-    sudo chown requestservice:requestservice /var/log/requestservice
-    sudo chown -R requestservice:requestservice "$API_DIR"
 fi
 
 # 4. Enable & restart service
